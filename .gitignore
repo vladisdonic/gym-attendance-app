@@ -1,0 +1,25 @@
+# Streamlit secrets - NIKDY NEPRIDÁVAJ!
+.streamlit/secrets.toml
+secrets.toml
+
+# Google Service Account JSON - NIKDY NEPRIDÁVAJ!
+*.json
+!package.json
+!package-lock.json
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+venv/
+.env
+
+# IDE
+.vscode/
+.idea/
+
+# OS
+.DS_Store
+Thumbs.db
