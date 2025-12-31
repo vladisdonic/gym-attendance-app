@@ -58,6 +58,9 @@ TRAINING_TIMES = [
     "18:30"
 ]
 
+# Heslo pre trénerskú časť
+TRAINER_PASSWORD = "supernova"
+
 
 def get_google_sheets_client():
     """Pripojenie k Google Sheets pomocou service account."""
@@ -276,14 +279,59 @@ def participant_view(worksheet):
                     st.balloons()
 
 
+def check_trainer_auth():
+    """Kontrola, či je používateľ prihlásený ako tréner."""
+    if 'trainer_authenticated' not in st.session_state:
+        st.session_state.trainer_authenticated = False
+    return st.session_state.trainer_authenticated
+
+
+def trainer_login():
+    """Formulár na prihlásenie trénera."""
+    st.title("🔐 Prihlásenie trénera")
+    st.markdown("---")
+    
+    with st.form("trainer_login_form"):
+        password = st.text_input(
+            "Heslo",
+            type="password",
+            placeholder="Zadaj heslo..."
+        )
+        
+        submitted = st.form_submit_button(
+            "🔓 Prihlásiť sa",
+            use_container_width=True,
+            type="primary"
+        )
+        
+        if submitted:
+            if password == TRAINER_PASSWORD:
+                st.session_state.trainer_authenticated = True
+                st.success("✅ Úspešne prihlásený!")
+                st.rerun()
+            else:
+                st.error("❌ Nesprávne heslo!")
+
+
 def statistics_view(client, spreadsheet_id):
     """Pohľad so štatistikami - najaktívnejší členovia za mesiace."""
+    # Kontrola autentifikácie
+    if not check_trainer_auth():
+        trainer_login()
+        return
+    
     st.title("📊 Štatistiky")
     st.markdown("---")
     
-    # Tlačidlo na obnovenie
-    if st.button("🔄 Obnoviť štatistiky", use_container_width=True):
-        st.rerun()
+    # Tlačidlo na odhlásenie
+    col1, col2 = st.columns([3, 1])
+    with col1:
+        if st.button("🔄 Obnoviť štatistiky", use_container_width=True):
+            st.rerun()
+    with col2:
+        if st.button("🚪 Odhlásiť sa", use_container_width=True):
+            st.session_state.trainer_authenticated = False
+            st.rerun()
     
     # Načítanie štatistík
     with st.spinner("Načítavam štatistiky..."):
@@ -329,12 +377,23 @@ def statistics_view(client, spreadsheet_id):
 
 def trainer_view(worksheet):
     """Pohľad pre trénera - prehľad účasti."""
+    # Kontrola autentifikácie
+    if not check_trainer_auth():
+        trainer_login()
+        return
+    
     st.title("👨‍🏫 Prehľad trénera")
     st.markdown("---")
     
-    # Tlačidlo na obnovenie
-    if st.button("🔄 Obnoviť údaje", use_container_width=True):
-        st.rerun()
+    # Tlačidlá na obnovenie a odhlásenie
+    col1, col2 = st.columns([3, 1])
+    with col1:
+        if st.button("🔄 Obnoviť údaje", use_container_width=True):
+            st.rerun()
+    with col2:
+        if st.button("🚪 Odhlásiť sa", use_container_width=True):
+            st.session_state.trainer_authenticated = False
+            st.rerun()
     
     # Načítanie dát
     df = get_today_attendance(worksheet)
