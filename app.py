@@ -696,6 +696,7 @@ def wallet_pass_view():
                         # Uloženie do session state
                         st.session_state['qr_code_data'] = qr_img_buffer.getvalue()
                         st.session_state['qr_code_filename'] = f"giantgym_{qr_name.strip().replace(' ', '_')}.png"
+                        st.session_state['qr_code_url'] = url  # Uloženie URL pre zobrazenie
                         st.session_state['qr_code_generated'] = True
                         st.rerun()
                     except Exception as e:
@@ -710,6 +711,17 @@ def wallet_pass_view():
             
             # Zobrazenie QR kódu
             st.image(st.session_state['qr_code_data'], caption="Tvoj QR kód", width=300)
+            
+            # Zobrazenie URL na skopírovanie
+            if 'qr_code_url' in st.session_state:
+                st.markdown("### 🔗 URL adresa:")
+                st.text_input(
+                    "Klikni a skopíruj URL",
+                    value=st.session_state['qr_code_url'],
+                    key="qr_url_display",
+                    help="Klikni do poľa a stlač Ctrl+C (Cmd+C na Mac) alebo vyber text a skopíruj",
+                    label_visibility="visible"
+                )
             
             st.download_button(
                 label="📥 Stiahnuť QR kód (.png)",
