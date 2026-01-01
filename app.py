@@ -16,6 +16,7 @@ import qrcode
 import zipfile
 import io
 import base64
+import hashlib
 
 # Konfigurácia stránky
 st.set_page_config(
@@ -443,14 +444,35 @@ def generate_wallet_pass(name, membership, time, auto=True):
         }
     }
     
+    # Vytvorenie obsahu súborov
+    pass_json = json.dumps(pass_data, ensure_ascii=False, indent=2).encode('utf-8')
+    barcode_png = qr_buffer.getvalue()
+    
+    # Vytvorenie manifest.json (SHA1 hashe všetkých súborov)
+    manifest = {
+        "pass.json": hashlib.sha1(pass_json).hexdigest(),
+        "barcode.png": hashlib.sha1(barcode_png).hexdigest()
+    }
+    manifest_json = json.dumps(manifest, ensure_ascii=False, indent=2).encode('utf-8')
+    
+    # Vytvorenie prázdneho signature súboru
+    # Poznámka: Pre produkčné použitie by toto malo byť digitálne podpísané Apple Developer certifikátom
+    signature = b""  # Prázdny signature (Apple Wallet môže odmietnuť, ale súbor bude správne formátovaný)
+    
     # Vytvorenie ZIP archívu (.pkpass)
     zip_buffer = io.BytesIO()
     with zipfile.ZipFile(zip_buffer, 'w', zipfile.ZIP_DEFLATED) as zip_file:
         # pass.json
-        zip_file.writestr("pass.json", json.dumps(pass_data, ensure_ascii=False, indent=2))
+        zip_file.writestr("pass.json", pass_json)
         
         # QR kód ako obrázok
-        zip_file.writestr("barcode.png", qr_buffer.getvalue())
+        zip_file.writestr("barcode.png", barcode_png)
+        
+        # manifest.json (vyžaduje Apple Wallet)
+        zip_file.writestr("manifest.json", manifest_json)
+        
+        # signature (vyžaduje Apple Wallet - prázdny, lebo nemáme Apple Developer certifikát)
+        zip_file.writestr("signature", signature)
     
     zip_buffer.seek(0)
     return zip_buffer
@@ -583,30 +605,31 @@ def wallet_pass_view():
             st.markdown("---")
             st.markdown("### 📖 Ako pridať do Wallet:")
             st.markdown("""
-            **iPhone/iPad v Safari:**
-            1. Klikni na tlačidlo "Stiahnuť .pkpass súbor" (hore)
-            2. Safari by mal automaticky rozpoznať súbor a ponúknuť "Pridať do Wallet"
-            3. Ak sa zobrazí varovanie o podpise, klikni na "Pridať napriek tomu" alebo "Add Anyway"
-            4. Karta sa pridá do Apple Wallet
+            **⚠️ Dôležité:** Bez Apple Developer certifikátu sa `.pkpass` súbor nemusí automaticky otvoriť v Apple Wallet.
+            Pre jednoduchšie použitie odporúčame použiť **QR Kód Obrázok** (druhý tab).
             
-            **Ak sa neotvorí automaticky:**
-            - Otvor stiahnutý súbor v Safari (nie v iných prehliadačoch)
-            - Alebo otvor súbor v Files app a klikni na neho
-            - Alebo pošli súbor cez AirDrop na iPhone
+            **iPhone/iPad - Pokus o otvorenie .pkpass:**
+            1. Stiahni súbor v Safari (nie v Chrome)
+            2. Otvor stiahnutý súbor v Safari alebo Files app
+            3. Ak sa zobrazí chyba o podpise, súbor nie je digitálne podpísaný
+            4. V tomto prípade použij **QR Kód Obrázok** namiesto toho
+            
+            **✅ Odporúčané riešenie - QR Kód Obrázok:**
+            - Prejdi na tab "🖼️ QR Kód Obrázok"
+            - Vygeneruj QR kód
+            - Ulož si ho do galérie
+            - Môžeš ho použiť priamo alebo pridať do Apple Wallet ako obrázok (cez aplikácie tretích strán)
             
             **Android:**
             1. Stiahni súbor
             2. Otvor súbor (môžeš potrebovať Google Wallet app)
             3. Klikni na "Pridať do Google Wallet"
             
-            **Použitie:**
-            - Otvor Wallet app
-            - Klikni na kartu
-            - QR kód sa automaticky naskenuje
+            **Použitie QR kódu:**
+            - Otvor fotoaparát na iPhone alebo Camera app na Android
+            - Namieri na QR kód
+            - Klikni na notifikáciu/odkaz
             - Aplikácia sa otvorí s vyplneným formulárom
-            
-            ⚠️ **Poznámka:** Apple Wallet môže vyžadovať digitálny podpis pre automatické otvorenie. 
-            Pre produkčné použitie by bolo potrebné zaregistrovať sa ako Apple Developer a podpísať súbor.
             """)
     
     with tab2:
