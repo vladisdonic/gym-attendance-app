@@ -208,28 +208,65 @@ def get_monthly_statistics(client, spreadsheet_id):
         return {}
 
 
-def participant_view(worksheet):
+def participant_view(worksheet, query_params=None):
     """Pohľad pre účastníka - prihlásenie na tréning."""
     st.title("🥊 Prihlásenie na tréning")
     st.markdown("---")
+    
+    # Načítanie parametrov z URL
+    if query_params is None:
+        query_params = st.query_params
+    
+    url_name = query_params.get("name", "")
+    url_membership = query_params.get("membership", "")
+    url_time = query_params.get("time", "")
+    auto_submit = query_params.get("auto", "0") == "1"
+    
+    # Určenie predvolených hodnôt z URL parametrov
+    default_name = url_name if url_name else ""
+    
+    # Nájdenie indexu pre typ členstva
+    default_membership_index = 1  # Predvolená: Mesačné členstvo
+    if url_membership:
+        # Skús nájsť presný match
+        for i, mem_type in enumerate(MEMBERSHIP_TYPES):
+            if mem_type == url_membership:
+                default_membership_index = i
+                break
+    
+    # Nájdenie indexu pre čas tréningu
+    default_time_index = 0  # Predvolená: 9:00
+    if url_time:
+        for i, time in enumerate(TRAINING_TIMES):
+            if time == url_time:
+                default_time_index = i
+                break
+    
+    # Automatické odoslanie ak sú všetky údaje v URL a auto=1
+    auto_submit_ready = (auto_submit and url_name and url_membership and url_time and 
+                        url_membership in MEMBERSHIP_TYPES and url_time in TRAINING_TIMES)
     
     # Formulár na prihlásenie
     with st.form("attendance_form", clear_on_submit=True):
         name = st.text_input(
             "Meno a priezvisko *",
-            placeholder="Zadaj svoje meno..."
+            value=default_name,
+            placeholder="Zadaj svoje meno...",
+            key="name_input"
         )
         
         membership = st.selectbox(
             "Typ členstva *",
             options=MEMBERSHIP_TYPES,
-            index=1  # Predvolená hodnota: Mesačné členstvo
+            index=default_membership_index,
+            key="membership_select"
         )
         
         training_time = st.selectbox(
             "Čas tréningu *",
             options=TRAINING_TIMES,
-            index=0
+            index=default_time_index,
+            key="time_select"
         )
         
         # Honeypot pole - skryté pre užívateľov, viditeľné pre botov
@@ -263,6 +300,30 @@ def participant_view(worksheet):
             type="primary"
         )
         
+        # Automatické odoslanie ak sú všetky údaje v URL
+        if auto_submit_ready and not submitted:
+            # Použijeme údaje z URL
+            final_name = url_name.strip()
+            final_membership = url_membership
+            final_time = url_time
+            
+            # Kontrola honeypot (musí byť prázdny)
+            if not honeypot or not honeypot.strip():
+                # Automatické odoslanie
+                if add_attendance(worksheet, final_name, final_membership, final_time):
+                    st.success("🎉 Úspešne prihlásený/á!")
+                    st.balloons()
+                    
+                    # Po úspešnom odoslaní presmeruj na čistú stránku (bez parametrov)
+                    st.markdown("""
+                    <script>
+                    setTimeout(function() {
+                        window.location.href = 'https://giantgym.streamlit.app/?view=participant';
+                    }, 2000);
+                    </script>
+                    """, unsafe_allow_html=True)
+                    return
+        
         if submitted:
             # Kontrola honeypot poľa - ak je vyplnené, ide o bota
             if honeypot and honeypot.strip():
@@ -277,6 +338,16 @@ def participant_view(worksheet):
                 if add_attendance(worksheet, name.strip(), membership, training_time):
                     st.success("🎉 Úspešne prihlásený/á!")
                     st.balloons()
+                    
+                    # Ak bolo odoslanie cez URL parametre, presmeruj
+                    if auto_submit:
+                        st.markdown("""
+                        <script>
+                        setTimeout(function() {
+                            window.location.href = 'https://giantgym.streamlit.app/?view=participant';
+                        }, 2000);
+                        </script>
+                        """, unsafe_allow_html=True)
 
 
 def check_trainer_auth():
@@ -553,19 +624,26 @@ def main():
         
         # QR kód info
         st.markdown("---")
-        st.markdown("### 📱 QR kódy")
+        st.markdown("### 📱 QR kódy a NFC tagy")
         st.markdown("""
-        **Pre prihlásenie účastníka:**
+        **Základné linky:**
         
-        `https://giantgym.streamlit.app/?view=participant`
+        - Účastník: `https://giantgym.streamlit.app/?view=participant`
+        - Tréner: `https://giantgym.streamlit.app/?view=trainer`
+        - Štatistiky: `https://giantgym.streamlit.app/?view=statistics`
         
-        **Pre trénerský prehľad:**
+        **Unikátne URL pre automatické prihlásenie:**
         
-        `https://giantgym.streamlit.app/?view=trainer`
+        `https://giantgym.streamlit.app/?view=participant&name=MENO&membership=TYP&time=ČAS&auto=1`
         
-        **Pre štatistiky:**
+        **Parametre:**
+        - `name` - Meno a priezvisko (URL encoded, napr. `Ján%20Novák`)
+        - `membership` - Typ členstva (presne: `Skúšobný tréning`, `Mesačné členstvo`, `Jednorázový vstup`, `Ročné členstvo`)
+        - `time` - Čas tréningu (`9:00`, `17:00`, `18:30`)
+        - `auto=1` - Automatické odoslanie (voliteľné)
         
-        `https://giantgym.streamlit.app/?view=statistics`
+        **Príklad:**
+        `https://giantgym.streamlit.app/?view=participant&name=Ján%20Novák&membership=Mesačné%20členstvo&time=17:00&auto=1`
         """)
     
     # Zobrazenie správneho pohľadu
@@ -574,7 +652,7 @@ def main():
     elif view == "statistics":
         statistics_view(client, spreadsheet_id)
     else:
-        participant_view(worksheet)
+        participant_view(worksheet, query_params)
 
 
 if __name__ == "__main__":
