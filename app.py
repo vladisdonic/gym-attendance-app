@@ -224,16 +224,6 @@ def participant_view(worksheet, query_params=None):
     url_time = unquote(query_params.get("time", ""))
     auto_submit = query_params.get("auto", "0") == "1"
     
-    # Diagnostika (len ak sú parametre v URL)
-    if url_name or url_membership or url_time:
-        with st.expander("🔍 Debug: Načítané parametre z URL", expanded=False):
-            st.write(f"**Name:** `{url_name}`")
-            st.write(f"**Membership:** `{url_membership}`")
-            st.write(f"**Time:** `{url_time}`")
-            st.write(f"**Auto:** `{auto_submit}`")
-            st.write(f"**Dostupné typy členstva:** {MEMBERSHIP_TYPES}")
-            st.write(f"**Dostupné časy:** {TRAINING_TIMES}")
-    
     # Určenie predvolených hodnôt z URL parametrov
     default_name = url_name if url_name else ""
     
