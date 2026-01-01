@@ -489,39 +489,48 @@ def wallet_pass_view():
                 try:
                     pass_file = generate_wallet_pass(name.strip(), membership, time, auto)
                     
-                    st.success("✅ Wallet Pass pripravený!")
-                    
-                    st.download_button(
-                        label="📥 Stiahnuť .pkpass súbor",
-                        data=pass_file.getvalue(),
-                        file_name=f"giantgym_{name.strip().replace(' ', '_')}.pkpass",
-                        mime="application/vnd.apple.pkpass",
-                        use_container_width=True
-                    )
-                    
-                    st.markdown("---")
-                    st.markdown("### 📖 Ako pridať do Wallet:")
-                    st.markdown("""
-                    **iPhone/iPad:**
-                    1. Stiahni súbor (otvorí sa automaticky)
-                    2. Klikni na "Pridať" v pravom hornom rohu
-                    3. Karta sa pridá do Apple Wallet
-                    
-                    **Android:**
-                    1. Stiahni súbor
-                    2. Otvor súbor (môžeš potrebovať Google Wallet app)
-                    3. Klikni na "Pridať do Google Wallet"
-                    
-                    **Použitie:**
-                    - Otvor Wallet app
-                    - Klikni na kartu
-                    - QR kód sa automaticky naskenuje
-                    - Aplikácia sa otvorí s vyplneným formulárom
-                    """)
+                    # Uloženie do session state (mimo formulára)
+                    st.session_state['wallet_pass_data'] = pass_file.getvalue()
+                    st.session_state['wallet_pass_filename'] = f"giantgym_{name.strip().replace(' ', '_')}.pkpass"
+                    st.session_state['wallet_pass_generated'] = True
+                    st.rerun()
                 except Exception as e:
                     st.error(f"❌ Chyba pri generovaní: {e}")
             else:
                 st.warning("⚠️ Prosím, vyplň všetky polia.")
+    
+    # Download button mimo formulára
+    if st.session_state.get('wallet_pass_generated', False):
+        st.markdown("---")
+        st.success("✅ Wallet Pass pripravený!")
+        
+        st.download_button(
+            label="📥 Stiahnuť .pkpass súbor",
+            data=st.session_state['wallet_pass_data'],
+            file_name=st.session_state['wallet_pass_filename'],
+            mime="application/vnd.apple.pkpass",
+            use_container_width=True
+        )
+        
+        st.markdown("---")
+        st.markdown("### 📖 Ako pridať do Wallet:")
+        st.markdown("""
+        **iPhone/iPad:**
+        1. Stiahni súbor (otvorí sa automaticky)
+        2. Klikni na "Pridať" v pravom hornom rohu
+        3. Karta sa pridá do Apple Wallet
+        
+        **Android:**
+        1. Stiahni súbor
+        2. Otvor súbor (môžeš potrebovať Google Wallet app)
+        3. Klikni na "Pridať do Google Wallet"
+        
+        **Použitie:**
+        - Otvor Wallet app
+        - Klikni na kartu
+        - QR kód sa automaticky naskenuje
+        - Aplikácia sa otvorí s vyplneným formulárom
+        """)
 
 
 def check_trainer_auth():
