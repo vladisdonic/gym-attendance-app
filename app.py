@@ -489,8 +489,24 @@ def main():
         """)
         return
     
+    # Kontrola spreadsheet_id s diagnostikou
     if "spreadsheet_id" not in st.secrets:
         st.error("⚠️ Chýba ID Google Sheetu v secrets!")
+        # Diagnostika pre debug
+        with st.expander("🔍 Diagnostika secrets (pre debug)"):
+            st.write("**Dostupné kľúče v st.secrets:**")
+            try:
+                secrets_keys = list(st.secrets.keys())
+                st.write(secrets_keys)
+                st.write("**Celý obsah st.secrets:**")
+                st.json(dict(st.secrets))
+            except Exception as e:
+                st.write(f"Chyba pri načítaní secrets: {e}")
+        return
+    
+    # Overenie, či spreadsheet_id nie je prázdny
+    if not st.secrets.get("spreadsheet_id") or not str(st.secrets["spreadsheet_id"]).strip():
+        st.error("⚠️ spreadsheet_id je prázdny alebo neplatný!")
         return
     
     # Pripojenie k Google Sheets
