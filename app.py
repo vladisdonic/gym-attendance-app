@@ -11,7 +11,10 @@ from google.oauth2.service_account import Credentials
 from datetime import datetime, date
 import pandas as pd
 import json
-from urllib.parse import unquote
+from urllib.parse import unquote, quote
+import qrcode
+import zipfile
+import io
 
 # Konfigurácia stránky
 st.set_page_config(
@@ -360,6 +363,167 @@ def participant_view(worksheet, query_params=None):
                         """, unsafe_allow_html=True)
 
 
+def generate_wallet_pass(name, membership, time, auto=True):
+    """
+    Generuje .pkpass súbor pre Apple Wallet a Google Wallet.
+    """
+    # Vytvorenie URL
+    base_url = "https://giantgym.streamlit.app/?view=participant"
+    params = {
+        "name": name,
+        "membership": membership,
+        "time": time
+    }
+    if auto:
+        params["auto"] = "1"
+    
+    query_string = "&".join([f"{k}={quote(str(v))}" for k, v in params.items()])
+    url = f"{base_url}&{query_string}"
+    
+    # Generovanie QR kódu
+    qr = qrcode.QRCode(version=1, box_size=10, border=5)
+    qr.add_data(url)
+    qr.make(fit=True)
+    
+    img = qr.make_image(fill_color="black", back_color="white")
+    
+    # Uloženie QR kódu do bufferu
+    qr_buffer = io.BytesIO()
+    img.save(qr_buffer, format='PNG')
+    qr_buffer.seek(0)
+    
+    # JSON pre pass.json
+    pass_data = {
+        "formatVersion": 1,
+        "passTypeIdentifier": "pass.com.giantgym.attendance",
+        "serialNumber": f"{name.replace(' ', '_')}_{int(datetime.now().timestamp())}",
+        "teamIdentifier": "GIANTGYM",
+        "organizationName": "Giant Gym",
+        "description": "Gym Attendance Pass",
+        "logoText": "Giant Gym",
+        "foregroundColor": "rgb(255, 255, 255)",
+        "backgroundColor": "rgb(0, 0, 0)",
+        "generic": {
+            "primaryFields": [
+                {
+                    "key": "name",
+                    "label": "Člen",
+                    "value": name
+                }
+            ],
+            "secondaryFields": [
+                {
+                    "key": "membership",
+                    "label": "Typ členstva",
+                    "value": membership
+                },
+                {
+                    "key": "time",
+                    "label": "Čas tréningu",
+                    "value": time
+                }
+            ],
+            "auxiliaryFields": [
+                {
+                    "key": "date",
+                    "label": "Vytvorené",
+                    "value": datetime.now().strftime("%d.%m.%Y")
+                }
+            ],
+            "barcode": {
+                "message": url,
+                "format": "PKBarcodeFormatQR",
+                "messageEncoding": "iso-8859-1"
+            }
+        }
+    }
+    
+    # Vytvorenie ZIP archívu (.pkpass)
+    zip_buffer = io.BytesIO()
+    with zipfile.ZipFile(zip_buffer, 'w', zipfile.ZIP_DEFLATED) as zip_file:
+        # pass.json
+        zip_file.writestr("pass.json", json.dumps(pass_data, ensure_ascii=False, indent=2))
+        
+        # QR kód ako obrázok
+        zip_file.writestr("barcode.png", qr_buffer.getvalue())
+    
+    zip_buffer.seek(0)
+    return zip_buffer
+
+
+def wallet_pass_view():
+    """Pohľad pre generovanie Wallet Pass."""
+    st.title("📱 Generovanie Wallet Pass")
+    st.markdown("---")
+    
+    st.info("💡 **Wallet Pass** obsahuje QR kód, ktorý môžeš pridať do Apple Wallet alebo Google Wallet. Pri otvorení karty sa automaticky otvorí aplikácia s vyplneným formulárom.")
+    
+    with st.form("wallet_pass_form"):
+        name = st.text_input(
+            "Meno a priezvisko *",
+            placeholder="Zadaj svoje meno..."
+        )
+        
+        membership = st.selectbox(
+            "Typ členstva *",
+            options=MEMBERSHIP_TYPES,
+            index=1  # Predvolená: Mesačné členstvo
+        )
+        
+        time = st.selectbox(
+            "Čas tréningu *",
+            options=TRAINING_TIMES,
+            index=0
+        )
+        
+        auto = st.checkbox("Automatické odoslanie pri otvorení", value=True)
+        
+        submitted = st.form_submit_button(
+            "📥 Generovať Wallet Pass",
+            use_container_width=True,
+            type="primary"
+        )
+        
+        if submitted:
+            if name and membership and time:
+                try:
+                    pass_file = generate_wallet_pass(name.strip(), membership, time, auto)
+                    
+                    st.success("✅ Wallet Pass pripravený!")
+                    
+                    st.download_button(
+                        label="📥 Stiahnuť .pkpass súbor",
+                        data=pass_file.getvalue(),
+                        file_name=f"giantgym_{name.strip().replace(' ', '_')}.pkpass",
+                        mime="application/vnd.apple.pkpass",
+                        use_container_width=True
+                    )
+                    
+                    st.markdown("---")
+                    st.markdown("### 📖 Ako pridať do Wallet:")
+                    st.markdown("""
+                    **iPhone/iPad:**
+                    1. Stiahni súbor (otvorí sa automaticky)
+                    2. Klikni na "Pridať" v pravom hornom rohu
+                    3. Karta sa pridá do Apple Wallet
+                    
+                    **Android:**
+                    1. Stiahni súbor
+                    2. Otvor súbor (môžeš potrebovať Google Wallet app)
+                    3. Klikni na "Pridať do Google Wallet"
+                    
+                    **Použitie:**
+                    - Otvor Wallet app
+                    - Klikni na kartu
+                    - QR kód sa automaticky naskenuje
+                    - Aplikácia sa otvorí s vyplneným formulárom
+                    """)
+                except Exception as e:
+                    st.error(f"❌ Chyba pri generovaní: {e}")
+            else:
+                st.warning("⚠️ Prosím, vyplň všetky polia.")
+
+
 def check_trainer_auth():
     """Kontrola, či je používateľ prihlásený ako tréner."""
     if 'trainer_authenticated' not in st.session_state:
@@ -629,6 +793,10 @@ def main():
             st.query_params["view"] = "statistics"
             st.rerun()
         
+        if st.button("📱 Wallet Pass", use_container_width=True):
+            st.query_params["view"] = "wallet"
+            st.rerun()
+        
         st.markdown("---")
         st.markdown(f"📅 **{date.today().strftime('%d.%m.%Y')}**")
         
@@ -661,6 +829,8 @@ def main():
         trainer_view(worksheet)
     elif view == "statistics":
         statistics_view(client, spreadsheet_id)
+    elif view == "wallet":
+        wallet_pass_view()
     else:
         participant_view(worksheet, query_params)
 
