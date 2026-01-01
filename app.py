@@ -489,8 +489,17 @@ def main():
         """)
         return
     
-    # Kontrola spreadsheet_id s diagnostikou
-    if "spreadsheet_id" not in st.secrets:
+    # Kontrola spreadsheet_id - môže byť na top level alebo vnútri gcp_service_account
+    spreadsheet_id = None
+    
+    # Skús najprv top level
+    if "spreadsheet_id" in st.secrets:
+        spreadsheet_id = st.secrets["spreadsheet_id"]
+    # Ak nie je na top level, skús vnútri gcp_service_account
+    elif "gcp_service_account" in st.secrets and "spreadsheet_id" in st.secrets["gcp_service_account"]:
+        spreadsheet_id = st.secrets["gcp_service_account"]["spreadsheet_id"]
+    
+    if not spreadsheet_id:
         st.error("⚠️ Chýba ID Google Sheetu v secrets!")
         # Diagnostika pre debug
         with st.expander("🔍 Diagnostika secrets (pre debug)"):
@@ -498,14 +507,15 @@ def main():
             try:
                 secrets_keys = list(st.secrets.keys())
                 st.write(secrets_keys)
-                st.write("**Celý obsah st.secrets:**")
-                st.json(dict(st.secrets))
+                if "gcp_service_account" in st.secrets:
+                    st.write("**Kľúče v gcp_service_account:**")
+                    st.write(list(st.secrets["gcp_service_account"].keys()))
             except Exception as e:
                 st.write(f"Chyba pri načítaní secrets: {e}")
         return
     
     # Overenie, či spreadsheet_id nie je prázdny
-    if not st.secrets.get("spreadsheet_id") or not str(st.secrets["spreadsheet_id"]).strip():
+    if not str(spreadsheet_id).strip():
         st.error("⚠️ spreadsheet_id je prázdny alebo neplatný!")
         return
     
@@ -514,7 +524,7 @@ def main():
     if not client:
         return
     
-    worksheet = get_or_create_sheet(client, st.secrets["spreadsheet_id"])
+    worksheet = get_or_create_sheet(client, spreadsheet_id)
     if not worksheet:
         return
     
@@ -558,7 +568,7 @@ def main():
     if view == "trainer":
         trainer_view(worksheet)
     elif view == "statistics":
-        statistics_view(client, st.secrets["spreadsheet_id"])
+        statistics_view(client, spreadsheet_id)
     else:
         participant_view(worksheet)
 
