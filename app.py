@@ -470,87 +470,190 @@ def wallet_pass_view():
         st.markdown("Pre Apple Wallet a Google Wallet (môže vyžadovať manuálne otvorenie)")
         
         with st.form("wallet_pass_form"):
-        name = st.text_input(
-            "Meno a priezvisko *",
-            placeholder="Zadaj svoje meno..."
-        )
+            name = st.text_input(
+                "Meno a priezvisko *",
+                placeholder="Zadaj svoje meno..."
+            )
+            
+            membership = st.selectbox(
+                "Typ členstva *",
+                options=MEMBERSHIP_TYPES,
+                index=1  # Predvolená: Mesačné členstvo
+            )
+            
+            time = st.selectbox(
+                "Čas tréningu *",
+                options=TRAINING_TIMES,
+                index=0
+            )
+            
+            auto = st.checkbox("Automatické odoslanie pri otvorení", value=True)
+            
+            submitted = st.form_submit_button(
+                "📥 Generovať Wallet Pass",
+                use_container_width=True,
+                type="primary"
+            )
+            
+            if submitted:
+                if name and membership and time:
+                    try:
+                        pass_file = generate_wallet_pass(name.strip(), membership, time, auto)
+                        
+                        # Uloženie do session state (mimo formulára)
+                        st.session_state['wallet_pass_data'] = pass_file.getvalue()
+                        st.session_state['wallet_pass_filename'] = f"giantgym_{name.strip().replace(' ', '_')}.pkpass"
+                        st.session_state['wallet_pass_generated'] = True
+                        st.rerun()
+                    except Exception as e:
+                        st.error(f"❌ Chyba pri generovaní: {e}")
+                else:
+                    st.warning("⚠️ Prosím, vyplň všetky polia.")
         
-        membership = st.selectbox(
-            "Typ členstva *",
-            options=MEMBERSHIP_TYPES,
-            index=1  # Predvolená: Mesačné členstvo
-        )
-        
-        time = st.selectbox(
-            "Čas tréningu *",
-            options=TRAINING_TIMES,
-            index=0
-        )
-        
-        auto = st.checkbox("Automatické odoslanie pri otvorení", value=True)
-        
-        submitted = st.form_submit_button(
-            "📥 Generovať Wallet Pass",
-            use_container_width=True,
-            type="primary"
-        )
-        
-        if submitted:
-            if name and membership and time:
-                try:
-                    pass_file = generate_wallet_pass(name.strip(), membership, time, auto)
-                    
-                    # Uloženie do session state (mimo formulára)
-                    st.session_state['wallet_pass_data'] = pass_file.getvalue()
-                    st.session_state['wallet_pass_filename'] = f"giantgym_{name.strip().replace(' ', '_')}.pkpass"
-                    st.session_state['wallet_pass_generated'] = True
-                    st.rerun()
-                except Exception as e:
-                    st.error(f"❌ Chyba pri generovaní: {e}")
-            else:
-                st.warning("⚠️ Prosím, vyplň všetky polia.")
+        # Download button mimo formulára (ale vnútri tab1)
+        if st.session_state.get('wallet_pass_generated', False):
+            st.markdown("---")
+            st.success("✅ Wallet Pass pripravený!")
+            
+            st.download_button(
+                label="📥 Stiahnuť .pkpass súbor",
+                data=st.session_state['wallet_pass_data'],
+                file_name=st.session_state['wallet_pass_filename'],
+                mime="application/vnd.apple.pkpass",
+                use_container_width=True
+            )
+            
+            st.markdown("---")
+            st.markdown("### 📖 Ako pridať do Wallet:")
+            st.markdown("""
+            **iPhone/iPad (ak sa neotvorí automaticky):**
+            1. Stiahni súbor
+            2. Otvor súbor (klikni na neho v Safari alebo Files app)
+            3. Ak sa zobrazí varovanie o podpise, klikni na "Pridať napriek tomu" alebo "Add Anyway"
+            4. Karta sa pridá do Apple Wallet
+            
+            **Alternatívne (ak sa neotvorí):**
+            - Otvor súbor v Safari (nie v iných prehliadačoch)
+            - Alebo pošli súbor cez AirDrop na iPhone
+            - Alebo otvor súbor v Files app a klikni na neho
+            
+            **Android:**
+            1. Stiahni súbor
+            2. Otvor súbor (môžeš potrebovať Google Wallet app)
+            3. Klikni na "Pridať do Google Wallet"
+            
+            **Použitie:**
+            - Otvor Wallet app
+            - Klikni na kartu
+            - QR kód sa automaticky naskenuje
+            - Aplikácia sa otvorí s vyplneným formulárom
+            
+            ⚠️ **Poznámka:** Apple Wallet môže vyžadovať digitálny podpis pre automatické otvorenie. 
+            Pre produkčné použitie by bolo potrebné zaregistrovať sa ako Apple Developer a podpísať súbor.
+            """)
     
-    # Download button mimo formulára
-    if st.session_state.get('wallet_pass_generated', False):
-        st.markdown("---")
-        st.success("✅ Wallet Pass pripravený!")
+    with tab2:
+        st.markdown("### 🖼️ QR Kód Obrázok")
+        st.markdown("Jednoduchší spôsob - stiahni QR kód ako obrázok a použij ho ako wallpaper alebo ulož do galérie")
         
-        st.download_button(
-            label="📥 Stiahnuť .pkpass súbor",
-            data=st.session_state['wallet_pass_data'],
-            file_name=st.session_state['wallet_pass_filename'],
-            mime="application/vnd.apple.pkpass",
-            use_container_width=True
-        )
+        with st.form("qr_code_form"):
+            qr_name = st.text_input(
+                "Meno a priezvisko *",
+                placeholder="Zadaj svoje meno...",
+                key="qr_name"
+            )
+            
+            qr_membership = st.selectbox(
+                "Typ členstva *",
+                options=MEMBERSHIP_TYPES,
+                index=1,
+                key="qr_membership"
+            )
+            
+            qr_time = st.selectbox(
+                "Čas tréningu *",
+                options=TRAINING_TIMES,
+                index=0,
+                key="qr_time"
+            )
+            
+            qr_auto = st.checkbox("Automatické odoslanie pri otvorení", value=True, key="qr_auto")
+            
+            qr_submitted = st.form_submit_button(
+                "🖼️ Generovať QR Kód",
+                use_container_width=True,
+                type="primary"
+            )
+            
+            if qr_submitted:
+                if qr_name and qr_membership and qr_time:
+                    try:
+                        # Vytvorenie URL
+                        base_url = "https://giantgym.streamlit.app/?view=participant"
+                        params = {
+                            "name": qr_name,
+                            "membership": qr_membership,
+                            "time": qr_time
+                        }
+                        if qr_auto:
+                            params["auto"] = "1"
+                        
+                        query_string = "&".join([f"{k}={quote(str(v))}" for k, v in params.items()])
+                        url = f"{base_url}&{query_string}"
+                        
+                        # Generovanie QR kódu
+                        qr = qrcode.QRCode(version=1, box_size=10, border=5)
+                        qr.add_data(url)
+                        qr.make(fit=True)
+                        
+                        img = qr.make_image(fill_color="black", back_color="white")
+                        
+                        # Uloženie do bufferu
+                        qr_img_buffer = io.BytesIO()
+                        img.save(qr_img_buffer, format='PNG')
+                        qr_img_buffer.seek(0)
+                        
+                        # Uloženie do session state
+                        st.session_state['qr_code_data'] = qr_img_buffer.getvalue()
+                        st.session_state['qr_code_filename'] = f"giantgym_{qr_name.strip().replace(' ', '_')}.png"
+                        st.session_state['qr_code_generated'] = True
+                        st.rerun()
+                    except Exception as e:
+                        st.error(f"❌ Chyba pri generovaní: {e}")
+                else:
+                    st.warning("⚠️ Prosím, vyplň všetky polia.")
         
-        st.markdown("---")
-        st.markdown("### 📖 Ako pridať do Wallet:")
-        st.markdown("""
-        **iPhone/iPad (ak sa neotvorí automaticky):**
-        1. Stiahni súbor
-        2. Otvor súbor (klikni na neho v Safari alebo Files app)
-        3. Ak sa zobrazí varovanie o podpise, klikni na "Pridať napriek tomu" alebo "Add Anyway"
-        4. Karta sa pridá do Apple Wallet
-        
-        **Alternatívne (ak sa neotvorí):**
-        - Otvor súbor v Safari (nie v iných prehliadačoch)
-        - Alebo pošli súbor cez AirDrop na iPhone
-        - Alebo otvor súbor v Files app a klikni na neho
-        
-        **Android:**
-        1. Stiahni súbor
-        2. Otvor súbor (môžeš potrebovať Google Wallet app)
-        3. Klikni na "Pridať do Google Wallet"
-        
-        **Použitie:**
-        - Otvor Wallet app
-        - Klikni na kartu
-        - QR kód sa automaticky naskenuje
-        - Aplikácia sa otvorí s vyplneným formulárom
-        
-        ⚠️ **Poznámka:** Apple Wallet môže vyžadovať digitálny podpis pre automatické otvorenie. 
-        Pre produkčné použitie by bolo potrebné zaregistrovať sa ako Apple Developer a podpísať súbor.
-        """)
+        # Download QR kódu mimo formulára
+        if st.session_state.get('qr_code_generated', False):
+            st.markdown("---")
+            st.success("✅ QR kód pripravený!")
+            
+            # Zobrazenie QR kódu
+            st.image(st.session_state['qr_code_data'], caption="Tvoj QR kód", width=300)
+            
+            st.download_button(
+                label="📥 Stiahnuť QR kód (.png)",
+                data=st.session_state['qr_code_data'],
+                file_name=st.session_state['qr_code_filename'],
+                mime="image/png",
+                use_container_width=True
+            )
+            
+            st.markdown("---")
+            st.markdown("### 💡 Ako použiť QR kód:")
+            st.markdown("""
+            **Možnosti použitia:**
+            1. **Ulož do galérie** - naskenuj QR kód pri každom príchode
+            2. **Nastav ako wallpaper** - rýchly prístup k QR kódu
+            3. **Vytlač a nos so sebou** - vytlač na papier alebo kartičku
+            4. **Pridaj do Apple Wallet ako obrázok** - niektoré aplikácie to podporujú
+            
+            **Naskenovanie:**
+            - Otvor fotoaparát na iPhone alebo Camera app na Android
+            - Namieri na QR kód
+            - Klikni na notifikáciu/odkaz
+            - Aplikácia sa otvorí s vyplneným formulárom
+            """)
 
 
 def check_trainer_auth():
