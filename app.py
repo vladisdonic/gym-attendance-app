@@ -15,6 +15,7 @@ from urllib.parse import unquote, quote
 import qrcode
 import zipfile
 import io
+import base64
 
 # Konfigurácia stránky
 st.set_page_config(
@@ -515,27 +516,83 @@ def wallet_pass_view():
             st.markdown("---")
             st.success("✅ Wallet Pass pripravený!")
             
+            # Konverzia binárnych dát na base64 pre JavaScript
+            pass_data_b64 = base64.b64encode(st.session_state['wallet_pass_data']).decode('utf-8')
+            filename = st.session_state['wallet_pass_filename']
+            
+            # JavaScript funkcia pre stiahnutie v Safari
+            download_js = f"""
+            <script>
+            function downloadPkpass() {{
+                // Konverzia base64 na blob
+                const byteCharacters = atob('{pass_data_b64}');
+                const byteNumbers = new Array(byteCharacters.length);
+                for (let i = 0; i < byteCharacters.length; i++) {{
+                    byteNumbers[i] = byteCharacters.charCodeAt(i);
+                }}
+                const byteArray = new Uint8Array(byteNumbers);
+                const blob = new Blob([byteArray], {{ type: 'application/vnd.apple.pkpass' }});
+                
+                // Vytvorenie URL pre blob
+                const url = window.URL.createObjectURL(blob);
+                
+                // Vytvorenie linku a automatické kliknutie
+                const a = document.createElement('a');
+                a.href = url;
+                a.download = '{filename}';
+                a.style.display = 'none';
+                document.body.appendChild(a);
+                a.click();
+                
+                // Vyčistenie
+                setTimeout(() => {{
+                    document.body.removeChild(a);
+                    window.URL.revokeObjectURL(url);
+                }}, 100);
+            }}
+            </script>
+            """
+            st.markdown(download_js, unsafe_allow_html=True)
+            
+            # Tlačidlo, ktoré volá JavaScript funkciu
+            st.markdown(f"""
+            <button onclick="downloadPkpass()" style="
+                width: 100%;
+                padding: 0.5rem 1rem;
+                background-color: #FF4B4B;
+                color: white;
+                border: none;
+                border-radius: 0.5rem;
+                font-size: 1rem;
+                font-weight: 600;
+                cursor: pointer;
+                margin: 10px 0;
+            ">📥 Stiahnuť .pkpass súbor</button>
+            """, unsafe_allow_html=True)
+            
+            # Záložné riešenie pre Streamlit download button
             st.download_button(
-                label="📥 Stiahnuť .pkpass súbor",
+                label="📥 Stiahnuť .pkpass súbor (záložné)",
                 data=st.session_state['wallet_pass_data'],
                 file_name=st.session_state['wallet_pass_filename'],
                 mime="application/vnd.apple.pkpass",
-                use_container_width=True
+                use_container_width=True,
+                key="pkpass_download_fallback"
             )
             
             st.markdown("---")
             st.markdown("### 📖 Ako pridať do Wallet:")
             st.markdown("""
-            **iPhone/iPad (ak sa neotvorí automaticky):**
-            1. Stiahni súbor
-            2. Otvor súbor (klikni na neho v Safari alebo Files app)
+            **iPhone/iPad v Safari:**
+            1. Klikni na tlačidlo "Stiahnuť .pkpass súbor" (hore)
+            2. Safari by mal automaticky rozpoznať súbor a ponúknuť "Pridať do Wallet"
             3. Ak sa zobrazí varovanie o podpise, klikni na "Pridať napriek tomu" alebo "Add Anyway"
             4. Karta sa pridá do Apple Wallet
             
-            **Alternatívne (ak sa neotvorí):**
-            - Otvor súbor v Safari (nie v iných prehliadačoch)
-            - Alebo pošli súbor cez AirDrop na iPhone
+            **Ak sa neotvorí automaticky:**
+            - Otvor stiahnutý súbor v Safari (nie v iných prehliadačoch)
             - Alebo otvor súbor v Files app a klikni na neho
+            - Alebo pošli súbor cez AirDrop na iPhone
             
             **Android:**
             1. Stiahni súbor
