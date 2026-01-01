@@ -388,8 +388,8 @@ def trainer_view(worksheet):
     # Tlačidlá na obnovenie a odhlásenie
     col1, col2 = st.columns([3, 1])
     with col1:
-        if st.button("🔄 Obnoviť údaje", use_container_width=True):
-            st.rerun()
+    if st.button("🔄 Obnoviť údaje", use_container_width=True):
+        st.rerun()
     with col2:
         if st.button("🚪 Odhlásiť sa", use_container_width=True):
             st.session_state.trainer_authenticated = False
@@ -555,13 +555,17 @@ def main():
         st.markdown("---")
         st.markdown("### 📱 QR kódy")
         st.markdown("""
-        Pre prihlásenie vytvor QR kód s URL:
+        **Pre prihlásenie účastníka:**
         
-        `https://your-app.streamlit.app/?view=participant`
+        `https://giantgym.streamlit.app/?view=participant`
         
-        Pre trénerský prehľad:
+        **Pre trénerský prehľad:**
         
-        `https://your-app.streamlit.app/?view=trainer`
+        `https://giantgym.streamlit.app/?view=trainer`
+        
+        **Pre štatistiky:**
+        
+        `https://giantgym.streamlit.app/?view=statistics`
         """)
     
     # Zobrazenie správneho pohľadu
