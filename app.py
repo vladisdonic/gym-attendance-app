@@ -462,7 +462,14 @@ def wallet_pass_view():
     
     st.info("💡 **Wallet Pass** obsahuje QR kód, ktorý môžeš pridať do Apple Wallet alebo Google Wallet. Pri otvorení karty sa automaticky otvorí aplikácia s vyplneným formulárom.")
     
-    with st.form("wallet_pass_form"):
+    # Tab pre výber typu
+    tab1, tab2 = st.tabs(["📱 Wallet Pass (.pkpass)", "🖼️ QR Kód Obrázok"])
+    
+    with tab1:
+        st.markdown("### 📱 Wallet Pass súbor")
+        st.markdown("Pre Apple Wallet a Google Wallet (môže vyžadovať manuálne otvorenie)")
+        
+        with st.form("wallet_pass_form"):
         name = st.text_input(
             "Meno a priezvisko *",
             placeholder="Zadaj svoje meno..."
