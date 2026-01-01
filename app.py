@@ -392,7 +392,8 @@ def generate_wallet_pass(name, membership, time, auto=True):
     img.save(qr_buffer, format='PNG')
     qr_buffer.seek(0)
     
-    # JSON pre pass.json
+    # JSON pre pass.json (bez podpisu - pre testovanie)
+    # Poznámka: Apple Wallet môže vyžadovať digitálny podpis pre automatické otvorenie
     pass_data = {
         "formatVersion": 1,
         "passTypeIdentifier": "pass.com.giantgym.attendance",
@@ -403,6 +404,8 @@ def generate_wallet_pass(name, membership, time, auto=True):
         "logoText": "Giant Gym",
         "foregroundColor": "rgb(255, 255, 255)",
         "backgroundColor": "rgb(0, 0, 0)",
+        "webServiceURL": "https://giantgym.streamlit.app",
+        "authenticationToken": "",
         "generic": {
             "primaryFields": [
                 {
@@ -433,7 +436,8 @@ def generate_wallet_pass(name, membership, time, auto=True):
             "barcode": {
                 "message": url,
                 "format": "PKBarcodeFormatQR",
-                "messageEncoding": "iso-8859-1"
+                "messageEncoding": "iso-8859-1",
+                "altText": "Naskenuj pre prihlásenie"
             }
         }
     }
@@ -515,10 +519,16 @@ def wallet_pass_view():
         st.markdown("---")
         st.markdown("### 📖 Ako pridať do Wallet:")
         st.markdown("""
-        **iPhone/iPad:**
-        1. Stiahni súbor (otvorí sa automaticky)
-        2. Klikni na "Pridať" v pravom hornom rohu
-        3. Karta sa pridá do Apple Wallet
+        **iPhone/iPad (ak sa neotvorí automaticky):**
+        1. Stiahni súbor
+        2. Otvor súbor (klikni na neho v Safari alebo Files app)
+        3. Ak sa zobrazí varovanie o podpise, klikni na "Pridať napriek tomu" alebo "Add Anyway"
+        4. Karta sa pridá do Apple Wallet
+        
+        **Alternatívne (ak sa neotvorí):**
+        - Otvor súbor v Safari (nie v iných prehliadačoch)
+        - Alebo pošli súbor cez AirDrop na iPhone
+        - Alebo otvor súbor v Files app a klikni na neho
         
         **Android:**
         1. Stiahni súbor
@@ -530,6 +540,9 @@ def wallet_pass_view():
         - Klikni na kartu
         - QR kód sa automaticky naskenuje
         - Aplikácia sa otvorí s vyplneným formulárom
+        
+        ⚠️ **Poznámka:** Apple Wallet môže vyžadovať digitálny podpis pre automatické otvorenie. 
+        Pre produkčné použitie by bolo potrebné zaregistrovať sa ako Apple Developer a podpísať súbor.
         """)
 
 
