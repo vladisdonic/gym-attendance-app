@@ -11,6 +11,7 @@ from google.oauth2.service_account import Credentials
 from datetime import datetime, date
 import pandas as pd
 import json
+from urllib.parse import unquote
 
 # Konfigurácia stránky
 st.set_page_config(
@@ -217,28 +218,47 @@ def participant_view(worksheet, query_params=None):
     if query_params is None:
         query_params = st.query_params
     
-    url_name = query_params.get("name", "")
-    url_membership = query_params.get("membership", "")
-    url_time = query_params.get("time", "")
+    # Dekódovanie URL parametrov (pre diakritiku a špeciálne znaky)
+    url_name = unquote(query_params.get("name", ""))
+    url_membership = unquote(query_params.get("membership", ""))
+    url_time = unquote(query_params.get("time", ""))
     auto_submit = query_params.get("auto", "0") == "1"
+    
+    # Diagnostika (len ak sú parametre v URL)
+    if url_name or url_membership or url_time:
+        with st.expander("🔍 Debug: Načítané parametre z URL", expanded=False):
+            st.write(f"**Name:** `{url_name}`")
+            st.write(f"**Membership:** `{url_membership}`")
+            st.write(f"**Time:** `{url_time}`")
+            st.write(f"**Auto:** `{auto_submit}`")
+            st.write(f"**Dostupné typy členstva:** {MEMBERSHIP_TYPES}")
+            st.write(f"**Dostupné časy:** {TRAINING_TIMES}")
     
     # Určenie predvolených hodnôt z URL parametrov
     default_name = url_name if url_name else ""
     
-    # Nájdenie indexu pre typ členstva
+    # Nájdenie indexu pre typ členstva (case-insensitive a s toleranciou na diakritiku)
     default_membership_index = 1  # Predvolená: Mesačné členstvo
     if url_membership:
+        url_membership_clean = url_membership.strip()
         # Skús nájsť presný match
         for i, mem_type in enumerate(MEMBERSHIP_TYPES):
-            if mem_type == url_membership:
+            if mem_type == url_membership_clean:
                 default_membership_index = i
                 break
+        else:
+            # Ak sa nenašiel presný match, skús case-insensitive
+            for i, mem_type in enumerate(MEMBERSHIP_TYPES):
+                if mem_type.lower() == url_membership_clean.lower():
+                    default_membership_index = i
+                    break
     
     # Nájdenie indexu pre čas tréningu
     default_time_index = 0  # Predvolená: 9:00
     if url_time:
+        url_time_clean = url_time.strip()
         for i, time in enumerate(TRAINING_TIMES):
-            if time == url_time:
+            if time == url_time_clean:
                 default_time_index = i
                 break
     
