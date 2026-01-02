@@ -142,6 +142,41 @@ def get_today_attendance(worksheet):
         return pd.DataFrame()
 
 
+def delete_attendance(worksheet, name, timestamp, membership_type, training_time=""):
+    """Vymazanie záznamu o účasti z Google Sheet."""
+    try:
+        # Načítanie všetkých dát
+        all_values = worksheet.get_all_values()
+        
+        # Hlavička je na riadku 1 (index 0), dáta začínajú od riadku 2 (index 1)
+        # Hľadáme riadok, ktorý zodpovedá všetkým parametrom
+        row_to_delete = None
+        
+        for i, row in enumerate(all_values[1:], start=2):  # Začíname od riadku 2 (index 1 v liste, ale riadok 2 v Sheet)
+            if len(row) >= 4:
+                row_timestamp = row[0] if len(row) > 0 else ""
+                row_name = row[1] if len(row) > 1 else ""
+                row_membership = row[2] if len(row) > 2 else ""
+                row_time = row[3] if len(row) > 3 else ""
+                
+                # Porovnanie - tolerancia na malé rozdiely v čase (môže byť sekunda rozdiel)
+                if (row_name == name and 
+                    row_membership == membership_type and 
+                    row_time == training_time and
+                    row_timestamp.startswith(timestamp[:5])):  # Porovnávame len hodiny:minúty
+                    row_to_delete = i
+                    break
+        
+        if row_to_delete:
+            worksheet.delete_rows(row_to_delete)
+            return True
+        else:
+            return False
+    except Exception as e:
+        st.error(f"Chyba pri vymazávaní: {e}")
+        return False
+
+
 def get_all_worksheets(client, spreadsheet_id):
     """Získanie všetkých hárkov zo spreadsheetu."""
     try:
@@ -857,12 +892,12 @@ def trainer_view(worksheet):
     # Tlačidlá na obnovenie a odhlásenie
     col1, col2 = st.columns([3, 1])
     with col1:
-        if st.button("🔄 Obnoviť údaje", use_container_width=True):
-            st.rerun()
+    if st.button("🔄 Obnoviť údaje", use_container_width=True):
+        st.rerun()
     with col2:
         if st.button("🚪 Odhlásiť sa", use_container_width=True):
             st.session_state.trainer_authenticated = False
-            st.rerun()
+        st.rerun()
     
     # Načítanie dát
     df = get_today_attendance(worksheet)
@@ -892,11 +927,19 @@ def trainer_view(worksheet):
                 
                 with st.expander(f"🕐 {training_time} - {count} prihlásených", expanded=True):
                     if not time_df.empty:
-                        st.dataframe(
-                            time_df[['Čas', 'Meno', 'Typ členstva']],
-                            use_container_width=True,
-                            hide_index=True
-                        )
+                        # Zobrazenie každého účastníka s tlačidlom na vymazanie
+                        for idx, row in time_df.iterrows():
+                            col1, col2 = st.columns([4, 1])
+                            with col1:
+                                st.markdown(f"**{row['Meno']}** - {row['Typ členstva']} ({row['Čas']})")
+                            with col2:
+                                delete_key = f"delete_{training_time}_{idx}_{row['Čas']}"
+                                if st.button("🗑️ Vymazať", key=delete_key, use_container_width=True):
+                                    if delete_attendance(worksheet, row['Meno'], row['Čas'], row['Typ členstva'], training_time):
+                                        st.success(f"✅ {row['Meno']} bol/a vymazaný/á")
+                                        st.rerun()
+                                    else:
+                                        st.error("❌ Chyba pri vymazávaní")
                     else:
                         st.info("Zatiaľ sa nikto neprihlásil na tento čas.")
         
@@ -919,11 +962,21 @@ def trainer_view(worksheet):
         if time_column in df.columns:
             display_columns.append(time_column)
         
-        st.dataframe(
-            df[display_columns],
-            use_container_width=True,
-            hide_index=True
-        )
+        # Zobrazenie každého účastníka s tlačidlom na vymazanie
+        for idx, row in df.iterrows():
+            col1, col2 = st.columns([4, 1])
+            with col1:
+                time_info = f" - {row[time_column]}" if time_column in row else ""
+                st.markdown(f"**{row['Meno']}** - {row['Typ členstva']}{time_info} ({row['Čas']})")
+            with col2:
+                delete_key = f"delete_all_{idx}_{row['Čas']}"
+                if st.button("🗑️ Vymazať", key=delete_key, use_container_width=True):
+                    training_time_val = row[time_column] if time_column in row else ""
+                    if delete_attendance(worksheet, row['Meno'], row['Čas'], row['Typ členstva'], training_time_val):
+                        st.success(f"✅ {row['Meno']} bol/a vymazaný/á")
+                        st.rerun()
+                    else:
+                        st.error("❌ Chyba pri vymazávaní")
     else:
         st.info("Zatiaľ sa nikto neprihlásil.")
 
@@ -1003,6 +1056,14 @@ def main():
     
     # Sidebar navigácia
     with st.sidebar:
+        # Logo
+        try:
+            st.image("giantgym.png", use_container_width=True)
+        except:
+            # Ak logo neexistuje, zobrazíme placeholder
+            st.markdown("### 🥊 Giant Gym")
+        
+        st.markdown("---")
         st.markdown("## 📱 Navigácia")
         
         if st.button("👤 Účastník", use_container_width=True):
