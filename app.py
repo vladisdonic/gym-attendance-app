@@ -1146,12 +1146,12 @@ def trainer_view(worksheet):
     # Tlačidlá na obnovenie a odhlásenie
     col1, col2 = st.columns([3, 1])
     with col1:
-    if st.button("🔄 Obnoviť údaje", use_container_width=True):
-        st.rerun()
+        if st.button("🔄 Obnoviť údaje", use_container_width=True):
+            st.rerun()
     with col2:
         if st.button("🚪 Odhlásiť sa", use_container_width=True):
             st.session_state.trainer_authenticated = False
-        st.rerun()
+            st.rerun()
     
     # Načítanie dát
     df = get_today_attendance(worksheet)
