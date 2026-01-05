@@ -249,6 +249,56 @@ def get_monthly_statistics(client, spreadsheet_id):
         return {}
 
 
+def get_next_training_time():
+    """
+    Určí najbližší čas tréningu na základe aktuálneho času.
+    Ak uplynula 1 hodina od začiatku tréningu, vyberie sa najbližší ďalší.
+    
+    Logika:
+    - Pred 9:00 → 9:00
+    - 9:00-9:59 → 9:00 (ešte neuplynula 1 hodina)
+    - 10:00-16:59 → 17:00 (po uplynutí 1 hodiny od 9:00)
+    - 17:00-17:59 → 17:00 (ešte neuplynula 1 hodina)
+    - 18:00-19:29 → 18:30 (po 18:00 sa vyberie 18:30)
+    - 19:30+ → 9:00 (na ďalší deň, po uplynutí 1 hodiny od 18:30)
+    
+    Returns:
+        str: Čas tréningu (napr. "9:00", "17:00", "18:30")
+    """
+    now = datetime.now()
+    current_hour = now.hour
+    current_minute = now.minute
+    current_time_minutes = current_hour * 60 + current_minute
+    
+    # Časy tréningov v minútach od polnoci
+    training_9_00 = 9 * 60  # 540 minút
+    training_17_00 = 17 * 60  # 1020 minút
+    training_18_30 = 18 * 60 + 30  # 1110 minút
+    
+    # Pred 9:00 → 9:00
+    if current_time_minutes < training_9_00:
+        return "9:00"
+    
+    # 9:00-9:59 → 9:00 (ešte neuplynula 1 hodina)
+    if training_9_00 <= current_time_minutes < training_9_00 + 60:
+        return "9:00"
+    
+    # 10:00-16:59 → 17:00 (po uplynutí 1 hodiny od 9:00)
+    if training_9_00 + 60 <= current_time_minutes < training_17_00:
+        return "17:00"
+    
+    # 17:00-17:59 → 17:00 (ešte neuplynula 1 hodina)
+    if training_17_00 <= current_time_minutes < training_17_00 + 60:
+        return "17:00"
+    
+    # 18:00-19:29 → 18:30 (po 18:00 sa vyberie 18:30)
+    if current_time_minutes >= 18 * 60 and current_time_minutes < training_18_30 + 60:
+        return "18:30"
+    
+    # 19:30+ → 9:00 (na ďalší deň, po uplynutí 1 hodiny od 18:30)
+    return "9:00"
+
+
 def participant_view(worksheet, query_params=None):
     """Pohľad pre účastníka - prihlásenie na tréning."""
     st.title("🥊 Prihlásenie na tréning")
@@ -258,11 +308,89 @@ def participant_view(worksheet, query_params=None):
     if query_params is None:
         query_params = st.query_params
     
+    # Detekcia NFC módu (nový spôsob)
+    nfc_mode = query_params.get("nfc", "0") == "1"
+    
+    # Ak je NFC mód, načítame údaje z localStorage a automaticky vyberieme čas
+    if nfc_mode:
+        st.markdown("""
+        <script>
+        (function() {
+            // Načítanie údajov z localStorage
+            const userData = {
+                name: localStorage.getItem('gym_name') || '',
+                membership: localStorage.getItem('gym_membership') || ''
+            };
+            
+            // Automatický výber času tréningu podľa aktuálneho času
+            const now = new Date();
+            const currentHour = now.getHours();
+            const currentMinute = now.getMinutes();
+            const currentTimeMinutes = currentHour * 60 + currentMinute;
+            
+            let selectedTime = '9:00'; // Predvolená hodnota
+            
+            // Časy tréningov v minútach
+            const training_9_00 = 9 * 60;      // 540 minút
+            const training_17_00 = 17 * 60;    // 1020 minút
+            const training_18_30 = 18 * 60 + 30; // 1110 minút
+            
+            // Pred 9:00 → 9:00
+            if (currentTimeMinutes < training_9_00) {
+                selectedTime = '9:00';
+            }
+            // 9:00-9:59 → 9:00 (ešte neuplynula 1 hodina)
+            else if (training_9_00 <= currentTimeMinutes && currentTimeMinutes < training_9_00 + 60) {
+                selectedTime = '9:00';
+            }
+            // 10:00-16:59 → 17:00 (po uplynutí 1 hodiny od 9:00)
+            else if (training_9_00 + 60 <= currentTimeMinutes && currentTimeMinutes < training_17_00) {
+                selectedTime = '17:00';
+            }
+            // 17:00-17:59 → 17:00 (ešte neuplynula 1 hodina)
+            else if (training_17_00 <= currentTimeMinutes && currentTimeMinutes < training_17_00 + 60) {
+                selectedTime = '17:00';
+            }
+            // 18:00-19:29 → 18:30 (po 18:00 sa vyberie 18:30)
+            else if (currentTimeMinutes >= 18 * 60 && currentTimeMinutes < training_18_30 + 60) {
+                selectedTime = '18:30';
+            }
+            // 19:30+ → 9:00 (na ďalší deň, po uplynutí 1 hodiny od 18:30)
+            else {
+                selectedTime = '9:00';
+            }
+            
+            // Ak sú všetky údaje dostupné, presmeruj s parametrami
+            if (userData.name && userData.membership) {
+                const baseUrl = 'https://giantgym.streamlit.app/?view=participant';
+                const params = new URLSearchParams({
+                    name: userData.name,
+                    membership: userData.membership,
+                    time: selectedTime, // Automaticky vybraný čas
+                    auto: '1'
+                });
+                window.location.href = baseUrl + '&' + params.toString();
+            } else {
+                // Ak chýbajú údaje, zobraz formulár
+                console.log('Chýbajú údaje v localStorage');
+            }
+        })();
+        </script>
+        """, unsafe_allow_html=True)
+        
+        st.info("📱 Načítavam tvoje údaje a vyberám najbližší tréning...")
+        return  # Presmerovanie sa deje cez JavaScript
+    
+    # PÔVODNÝ SPÔSOB - URL parametre (zachovaný)
     # Dekódovanie URL parametrov (pre diakritiku a špeciálne znaky)
     url_name = unquote(query_params.get("name", ""))
     url_membership = unquote(query_params.get("membership", ""))
     url_time = unquote(query_params.get("time", ""))
     auto_submit = query_params.get("auto", "0") == "1"
+    
+    # Ak čas nie je v URL, automaticky vyberieme najbližší
+    if not url_time:
+        url_time = get_next_training_time()
     
     # Určenie predvolených hodnôt z URL parametrov
     default_name = url_name if url_name else ""
@@ -295,6 +423,37 @@ def participant_view(worksheet, query_params=None):
     # Automatické odoslanie ak sú všetky údaje v URL a auto=1
     auto_submit_ready = (auto_submit and url_name and url_membership and url_time and 
                         url_membership in MEMBERSHIP_TYPES and url_time in TRAINING_TIMES)
+    
+    # Sekcia na uloženie údajov pre NFC (voliteľné)
+    with st.expander("💾 Uložiť údaje pre NFC (jednorazové nastavenie)", expanded=False):
+        st.markdown("""
+        **Ulož si údaje do telefónu, aby si pri naskenovaní NFC čipu alebo QR kódu nemusel/a nič vyplňovať.**
+        
+        Po uložení stačí naskenovať NFC čip v gyme a aplikácia automaticky:
+        - Načíta tvoje údaje
+        - Vyberie najbližší tréning podľa aktuálneho času
+        - Automaticky ťa prihlási
+        """)
+        
+        save_name = st.text_input("Meno a priezvisko", key="save_name", placeholder="Zadaj svoje meno...")
+        save_membership = st.selectbox("Typ členstva", MEMBERSHIP_TYPES, key="save_membership", index=1)
+        # Čas sa neukladá - vždy sa vyberie automaticky podľa aktuálneho času
+        
+        if st.button("💾 Uložiť údaje", key="save_data"):
+            if save_name.strip():
+                st.markdown(f"""
+                <script>
+                localStorage.setItem('gym_name', {json.dumps(save_name.strip())});
+                localStorage.setItem('gym_membership', {json.dumps(save_membership)});
+                // Čas sa neukladá - vždy sa vyberie automaticky
+                alert('✅ Údaje uložené! Teraz môžeš naskenovať NFC čip alebo QR kód v gyme.');
+                </script>
+                """, unsafe_allow_html=True)
+                st.success("✅ Údaje uložené! Teraz môžeš naskenovať NFC čip alebo QR kód v gyme.")
+            else:
+                st.warning("⚠️ Prosím, zadaj meno.")
+    
+    st.markdown("---")
     
     # Formulár na prihlásenie
     with st.form("attendance_form", clear_on_submit=True):
@@ -1095,14 +1254,23 @@ def main():
         - Tréner: `https://giantgym.streamlit.app/?view=trainer`
         - Štatistiky: `https://giantgym.streamlit.app/?view=statistics`
         
-        **Unikátne URL pre automatické prihlásenie:**
+        **NFC čip v gyme (nový spôsob):**
+        
+        `https://giantgym.streamlit.app/?view=participant&nfc=1`
+        
+        Po naskenovaní automaticky:
+        - Načíta údaje z telefónu (localStorage)
+        - Vyberie najbližší tréning podľa aktuálneho času
+        - Automaticky prihlási
+        
+        **Unikátne URL pre automatické prihlásenie (pôvodný spôsob):**
         
         `https://giantgym.streamlit.app/?view=participant&name=MENO&membership=TYP&time=ČAS&auto=1`
         
         **Parametre:**
         - `name` - Meno a priezvisko (URL encoded, napr. `Ján%20Novák`)
         - `membership` - Typ členstva (presne: `Skúšobný tréning`, `Mesačné členstvo`, `Jednorázový vstup`, `Ročné členstvo`)
-        - `time` - Čas tréningu (`9:00`, `17:00`, `18:30`)
+        - `time` - Čas tréningu (`9:00`, `17:00`, `18:30`) - ak chýba, vyberie sa automaticky
         - `auto=1` - Automatické odoslanie (voliteľné)
         
         **Príklad:**
