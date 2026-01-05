@@ -1399,28 +1399,13 @@ def trainer_view(worksheet):
 def main():
     """Hlavná funkcia aplikácie."""
     
-    # CSS na skrytie akéhokoľvek zobrazeného JavaScript kódu a HTML elementov s JavaScript kódom
+    # CSS na skrytie akéhokoľvek zobrazeného JavaScript kódu
     st.markdown("""
     <style>
     /* Skryť akýkoľvek zobrazený JavaScript kód */
     script {
         display: none !important;
         visibility: hidden !important;
-    }
-    /* Skryť text obsahujúci })(); alebo podobný JavaScript kód */
-    p:contains("})();"),
-    div:contains("})();"),
-    span:contains("})();") {
-        display: none !important;
-        visibility: hidden !important;
-        height: 0 !important;
-        width: 0 !important;
-        overflow: hidden !important;
-    }
-    /* Skryť akékoľvek prázdne alebo neviditeľné elementy s JavaScript kódom */
-    *[style*="display: none"]:contains("})();"),
-    *[style*="visibility: hidden"]:contains("})();") {
-        display: none !important;
     }
     </style>
     <script>
@@ -1449,109 +1434,6 @@ def main():
         
         // Spustiť aj po úplnom načítaní stránky
         window.addEventListener('load', hideJavaScriptCode);
-        
-        // Skontroluj, či už bol súhlas s cookies
-        const consent = sessionStorage.getItem('cookie_consent');
-        if (consent) {
-            const banner = document.getElementById('cookie-consent-banner');
-            if (banner) {
-                banner.style.display = 'none';
-            }
-        }
-    })();
-    </script>
-    """, unsafe_allow_html=True)
-    
-    # Zobrazenie cookie consent banneru (ak ešte nebol súhlas)
-    st.markdown("""
-    <div id="cookie-consent-banner" style="
-        position: fixed;
-        bottom: 0;
-        left: 0;
-        right: 0;
-        background-color: #f0f2f6;
-        padding: 15px 20px;
-        box-shadow: 0 -2px 10px rgba(0,0,0,0.1);
-        z-index: 1000;
-        border-top: 2px solid #FF4B4B;
-        display: none;
-    ">
-        <div style="max-width: 1200px; margin: 0 auto; display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 15px;">
-            <div style="flex: 1; min-width: 250px;">
-                <strong>🍪 Cookies</strong>
-                <p style="margin: 5px 0 0 0; font-size: 14px; color: #666;">
-                    Táto aplikácia používa cookies na uloženie tvojich údajov (meno, typ členstva) pre automatické prihlásenie pri naskenovaní NFC tagu. Údaje sa ukladajú len lokálne v tvojom telefóne.
-                </p>
-            </div>
-            <div style="display: flex; gap: 10px;">
-                <button id="accept-cookies" style="
-                    background-color: #FF4B4B;
-                    color: white;
-                    border: none;
-                    padding: 10px 20px;
-                    border-radius: 5px;
-                    cursor: pointer;
-                    font-weight: 600;
-                ">Súhlasím</button>
-                <button id="reject-cookies" style="
-                    background-color: #666;
-                    color: white;
-                    border: none;
-                    padding: 10px 20px;
-                    border-radius: 5px;
-                    cursor: pointer;
-                ">Odmietnuť</button>
-            </div>
-        </div>
-    </div>
-    <script>
-    (function() {
-        const consent = sessionStorage.getItem('cookie_consent');
-        const banner = document.getElementById('cookie-consent-banner');
-        
-        if (!consent && banner) {
-            banner.style.display = 'block';
-            document.body.style.marginBottom = '120px';
-        }
-        
-        function setCookieConsent(accepted) {
-            sessionStorage.setItem('cookie_consent', accepted ? 'accepted' : 'rejected');
-            if (banner) {
-                banner.style.display = 'none';
-                document.body.style.marginBottom = '0';
-            }
-            
-            // Ak odmietol cookies, zobrazíme informáciu
-            if (!accepted) {
-                const infoDiv = document.createElement('div');
-                infoDiv.style.cssText = 'padding: 15px; background-color: #fff3cd; border-radius: 5px; margin: 10px 0; border-left: 4px solid #ffc107;';
-                infoDiv.innerHTML = '<strong>ℹ️ Informácia:</strong> Pre automatické prihlásenie pri naskenovaní NFC tagu je potrebný súhlas s cookies. Môžeš použiť alternatívne riešenie - vygenerovať si vlastný QR kód s tvojimi údajmi.';
-                document.body.insertBefore(infoDiv, document.body.firstChild);
-            }
-        }
-        
-        const acceptBtn = document.getElementById('accept-cookies');
-        const rejectBtn = document.getElementById('reject-cookies');
-        
-        if (acceptBtn) {
-            acceptBtn.addEventListener('click', function() {
-                setCookieConsent(true);
-            });
-        }
-        
-        if (rejectBtn) {
-            rejectBtn.addEventListener('click', function() {
-                setCookieConsent(false);
-            });
-        }
-        
-        // Skontroluj, či už bol súhlas odmietnutý
-        if (consent === 'rejected') {
-            const infoDiv = document.createElement('div');
-            infoDiv.style.cssText = 'padding: 15px; background-color: #fff3cd; border-radius: 5px; margin: 10px 0; border-left: 4px solid #ffc107;';
-            infoDiv.innerHTML = '<strong>ℹ️ Informácia:</strong> Pre automatické prihlásenie pri naskenovaní NFC tagu je potrebný súhlas s cookies. Môžeš použiť alternatívne riešenie - vygenerovať si vlastný QR kód s tvojimi údajmi.';
-            document.body.insertBefore(infoDiv, document.body.firstChild);
-        }
     })();
     </script>
     """, unsafe_allow_html=True)
