@@ -430,6 +430,13 @@ def participant_view(worksheet, query_params=None):
             }
         })();
         </script>
+        <style>
+        /* Skryť akýkoľvek zobrazený JavaScript kód */
+        script {
+            display: none !important;
+            visibility: hidden !important;
+        }
+        </style>
         """, unsafe_allow_html=True)
         
         # Zobrazíme informáciu - ak JavaScript presmeroval, táto časť sa nezobrazí
@@ -1300,12 +1307,12 @@ def trainer_view(worksheet):
     # Tlačidlá na obnovenie a odhlásenie
     col1, col2 = st.columns([3, 1])
     with col1:
-        if st.button("🔄 Obnoviť údaje", use_container_width=True):
-            st.rerun()
+    if st.button("🔄 Obnoviť údaje", use_container_width=True):
+        st.rerun()
     with col2:
         if st.button("🚪 Odhlásiť sa", use_container_width=True):
             st.session_state.trainer_authenticated = False
-            st.rerun()
+        st.rerun()
     
     # Načítanie dát
     df = get_today_attendance(worksheet)
@@ -1391,6 +1398,21 @@ def trainer_view(worksheet):
 
 def main():
     """Hlavná funkcia aplikácie."""
+    
+    # CSS na skrytie akéhokoľvek zobrazeného JavaScript kódu
+    st.markdown("""
+    <style>
+    /* Skryť akýkoľvek zobrazený JavaScript kód */
+    script {
+        display: none !important;
+        visibility: hidden !important;
+    }
+    /* Skryť text obsahujúci })(); alebo podobný JavaScript kód */
+    *:contains("})();") {
+        display: none !important;
+    }
+    </style>
+    """, unsafe_allow_html=True)
     
     # Cookie Consent Banner - kontrola súhlasu
     # Súhlas sa kontroluje cez JavaScript a sessionStorage (nevyžaduje cookies)
