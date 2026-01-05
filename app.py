@@ -1300,8 +1300,8 @@ def trainer_view(worksheet):
     # Tlačidlá na obnovenie a odhlásenie
     col1, col2 = st.columns([3, 1])
     with col1:
-        if st.button("🔄 Obnoviť údaje", use_container_width=True):
-            st.rerun()
+    if st.button("🔄 Obnoviť údaje", use_container_width=True):
+        st.rerun()
     with col2:
         if st.button("🚪 Odhlásiť sa", use_container_width=True):
             st.session_state.trainer_authenticated = False
@@ -1510,99 +1510,6 @@ def main():
     })();
     </script>
     """, unsafe_allow_html=True)
-    
-    if False:  # Placeholder - banner sa zobrazuje cez JavaScript
-        st.markdown("""
-        <div id="cookie-consent-banner" style="
-            position: fixed;
-            bottom: 0;
-            left: 0;
-            right: 0;
-            background-color: #f0f2f6;
-            padding: 20px;
-            box-shadow: 0 -2px 10px rgba(0,0,0,0.1);
-            z-index: 1000;
-            border-top: 2px solid #FF4B4B;
-        ">
-            <div style="max-width: 1200px; margin: 0 auto; display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 15px;">
-                <div style="flex: 1; min-width: 250px;">
-                    <strong>🍪 Cookies</strong>
-                    <p style="margin: 5px 0 0 0; font-size: 14px; color: #666;">
-                        Táto aplikácia používa cookies na uloženie tvojich údajov (meno, typ členstva) pre automatické prihlásenie pri naskenovaní NFC tagu. Údaje sa ukladajú len lokálne v tvojom telefóne.
-                    </p>
-                </div>
-                <div style="display: flex; gap: 10px;">
-                    <button id="accept-cookies" style="
-                        background-color: #FF4B4B;
-                        color: white;
-                        border: none;
-                        padding: 10px 20px;
-                        border-radius: 5px;
-                        cursor: pointer;
-                        font-weight: 600;
-                    ">Súhlasím</button>
-                    <button id="reject-cookies" style="
-                        background-color: #666;
-                        color: white;
-                        border: none;
-                        padding: 10px 20px;
-                        border-radius: 5px;
-                        cursor: pointer;
-                    ">Odmietnuť</button>
-                </div>
-            </div>
-        </div>
-        <script>
-        (function() {
-            function setCookieConsent(accepted) {
-                // Uloženie súhlasu do sessionStorage (nevyžaduje cookies)
-                sessionStorage.setItem('cookie_consent', accepted ? 'accepted' : 'rejected');
-                // Skryť banner
-                const banner = document.getElementById('cookie-consent-banner');
-                if (banner) {
-                    banner.style.display = 'none';
-                }
-                // Obnov stránku pre aktualizáciu session state
-                window.location.reload();
-            }
-            
-            document.getElementById('accept-cookies').addEventListener('click', function() {
-                setCookieConsent(true);
-            });
-            
-            document.getElementById('reject-cookies').addEventListener('click', function() {
-                setCookieConsent(false);
-            });
-            
-            // Skontroluj, či už bol súhlas
-            const consent = sessionStorage.getItem('cookie_consent');
-            if (consent) {
-                const banner = document.getElementById('cookie-consent-banner');
-                if (banner) {
-                    banner.style.display = 'none';
-                }
-            }
-        })();
-        </script>
-        <style>
-        body {
-            margin-bottom: 120px; /* Priestor pre cookie banner */
-        }
-        </style>
-        """, unsafe_allow_html=True)
-        
-        # Načítanie súhlasu z sessionStorage
-        st.markdown("""
-        <script>
-        (function() {
-            const consent = sessionStorage.getItem('cookie_consent');
-            if (consent) {
-                // Pošli informáciu do Streamlit
-                window.parent.postMessage({type: 'cookie_consent', value: consent}, '*');
-            }
-        })();
-        </script>
-        """, unsafe_allow_html=True)
     
     # Kontrola konfigurácie
     if "gcp_service_account" not in st.secrets:
