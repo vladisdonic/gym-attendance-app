@@ -1305,7 +1305,7 @@ def trainer_view(worksheet):
     with col2:
         if st.button("🚪 Odhlásiť sa", use_container_width=True):
             st.session_state.trainer_authenticated = False
-        st.rerun()
+            st.rerun()
     
     # Načítanie dát
     df = get_today_attendance(worksheet)
