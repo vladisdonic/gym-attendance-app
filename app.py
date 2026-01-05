@@ -324,6 +324,14 @@ def participant_view(worksheet, query_params=None):
                 return '';
             }
             
+            // Funkcia na uloženie cookie
+            function setCookie(name, value, days = 365) {
+                const encodedValue = encodeURIComponent(value);
+                const expires = new Date();
+                expires.setTime(expires.getTime() + (days * 24 * 60 * 60 * 1000));
+                document.cookie = `${name}=${encodedValue};expires=${expires.toUTCString()};path=/;SameSite=Lax;Secure`;
+            }
+            
             // Počkáme, kým sa DOM načíta (pre iPhone kompatibilitu)
             if (document.readyState === 'loading') {
                 document.addEventListener('DOMContentLoaded', processNFC);
@@ -333,19 +341,26 @@ def participant_view(worksheet, query_params=None):
             
             function processNFC() {
                 try {
-                    // Načítanie údajov - najprv skúsime cookies (lepšie pre Safari), potom localStorage
+                    // Načítanie údajov - PRIMÁRNE: cookies (funguje lepšie na iPhone/Safari)
                     let userData = {
                         name: getCookie('gym_name') || '',
                         membership: getCookie('gym_membership') || ''
                     };
                     
-                    // Ak cookies nefungujú, skús localStorage
+                    // ZÁLOŽNÉ: localStorage (ak cookies nefungujú)
                     if (!userData.name || !userData.membership) {
                         try {
-                            userData = {
-                                name: localStorage.getItem('gym_name') || userData.name || '',
-                                membership: localStorage.getItem('gym_membership') || userData.membership || ''
-                            };
+                            const localName = localStorage.getItem('gym_name');
+                            const localMembership = localStorage.getItem('gym_membership');
+                            if (localName && localMembership) {
+                                userData = {
+                                    name: localName,
+                                    membership: localMembership
+                                };
+                                // Ak sa údaje našli v localStorage, ulož ich aj do cookies (migrácia)
+                                setCookie('gym_name', localName);
+                                setCookie('gym_membership', localMembership);
+                            }
                         } catch (e) {
                             console.log('localStorage nie je dostupné:', e);
                         }
@@ -488,7 +503,7 @@ def participant_view(worksheet, query_params=None):
         - Automaticky ťa prihlási
         """)
         
-        # Debug sekcia - zobrazenie aktuálnych údajov v cookies/localStorage
+        # Debug sekcia - zobrazenie aktuálnych údajov (cookies primárne, localStorage záložné)
         st.markdown("### 🔍 Kontrola uložených údajov")
         st.markdown("""
         <script>
@@ -501,14 +516,21 @@ def participant_view(worksheet, query_params=None):
                 return '';
             }
             
-            // Skúsime najprv cookies, potom localStorage
+            // PRIMÁRNE: Skúsime cookies (funguje lepšie na iPhone)
             let savedName = getCookie('gym_name') || '';
             let savedMembership = getCookie('gym_membership') || '';
+            let storageType = 'cookies';
             
+            // ZÁLOŽNÉ: localStorage (ak cookies nefungujú)
             if (!savedName || !savedMembership) {
                 try {
-                    savedName = localStorage.getItem('gym_name') || savedName || '';
-                    savedMembership = localStorage.getItem('gym_membership') || savedMembership || '';
+                    const localName = localStorage.getItem('gym_name');
+                    const localMembership = localStorage.getItem('gym_membership');
+                    if (localName && localMembership) {
+                        savedName = localName;
+                        savedMembership = localMembership;
+                        storageType = 'localStorage';
+                    }
                 } catch (e) {
                     console.log('localStorage nie je dostupné:', e);
                 }
@@ -517,12 +539,12 @@ def participant_view(worksheet, query_params=None):
             if (savedName && savedMembership) {
                 const infoDiv = document.createElement('div');
                 infoDiv.style.cssText = 'padding: 10px; background-color: #d4edda; border-radius: 5px; margin: 10px 0;';
-                infoDiv.innerHTML = '<strong>✅ Uložené údaje:</strong><br>Meno: ' + savedName + '<br>Typ členstva: ' + savedMembership;
+                infoDiv.innerHTML = '<strong>✅ Uložené údaje (' + storageType + '):</strong><br>Meno: ' + savedName + '<br>Typ členstva: ' + savedMembership;
                 document.currentScript.parentElement.appendChild(infoDiv);
             } else {
                 const infoDiv = document.createElement('div');
                 infoDiv.style.cssText = 'padding: 10px; background-color: #fff3cd; border-radius: 5px; margin: 10px 0;';
-                infoDiv.innerHTML = '<strong>⚠️ Žiadne údaje nie sú uložené</strong>';
+                infoDiv.innerHTML = '<strong>⚠️ Žiadne údaje nie sú uložené</strong><br><small>Ulož si údaje pomocou tlačidla nižšie.</small>';
                 document.currentScript.parentElement.appendChild(infoDiv);
             }
         })();
@@ -622,12 +644,14 @@ def participant_view(worksheet, query_params=None):
         st.markdown(f"""
         <script>
         (function() {{
-            // Funkcia na uloženie cookie
+            // Funkcia na uloženie cookie (primárne úložisko pre iPhone)
             function setCookie(name, value, days = 365) {{
                 const encodedValue = encodeURIComponent(value);
                 const expires = new Date();
                 expires.setTime(expires.getTime() + (days * 24 * 60 * 60 * 1000));
-                document.cookie = `${{name}}=${{encodedValue}};expires=${{expires.toUTCString()}};path=/;SameSite=Lax`;
+                // Secure flag pre HTTPS (Streamlit Cloud má HTTPS)
+                // SameSite=Lax funguje dobre v Safari
+                document.cookie = `${{name}}=${{encodedValue}};expires=${{expires.toUTCString()}};path=/;SameSite=Lax;Secure`;
             }}
             
             // Počkáme, kým sa DOM načíta (pre iPhone kompatibilitu)
@@ -1367,6 +1391,218 @@ def trainer_view(worksheet):
 
 def main():
     """Hlavná funkcia aplikácie."""
+    
+    # Cookie Consent Banner - kontrola súhlasu
+    # Súhlas sa kontroluje cez JavaScript a sessionStorage (nevyžaduje cookies)
+    st.markdown("""
+    <script>
+    (function() {
+        // Skontroluj, či už bol súhlas
+        const consent = sessionStorage.getItem('cookie_consent');
+        if (consent) {
+            // Súhlas už bol daný, skryť banner
+            const banner = document.getElementById('cookie-consent-banner');
+            if (banner) {
+                banner.style.display = 'none';
+            }
+        }
+    })();
+    </script>
+    """, unsafe_allow_html=True)
+    
+    # Zobrazenie cookie consent banneru (ak ešte nebol súhlas)
+    st.markdown("""
+    <div id="cookie-consent-banner" style="
+        position: fixed;
+        bottom: 0;
+        left: 0;
+        right: 0;
+        background-color: #f0f2f6;
+        padding: 15px 20px;
+        box-shadow: 0 -2px 10px rgba(0,0,0,0.1);
+        z-index: 1000;
+        border-top: 2px solid #FF4B4B;
+        display: none;
+    ">
+        <div style="max-width: 1200px; margin: 0 auto; display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 15px;">
+            <div style="flex: 1; min-width: 250px;">
+                <strong>🍪 Cookies</strong>
+                <p style="margin: 5px 0 0 0; font-size: 14px; color: #666;">
+                    Táto aplikácia používa cookies na uloženie tvojich údajov (meno, typ členstva) pre automatické prihlásenie pri naskenovaní NFC tagu. Údaje sa ukladajú len lokálne v tvojom telefóne.
+                </p>
+            </div>
+            <div style="display: flex; gap: 10px;">
+                <button id="accept-cookies" style="
+                    background-color: #FF4B4B;
+                    color: white;
+                    border: none;
+                    padding: 10px 20px;
+                    border-radius: 5px;
+                    cursor: pointer;
+                    font-weight: 600;
+                ">Súhlasím</button>
+                <button id="reject-cookies" style="
+                    background-color: #666;
+                    color: white;
+                    border: none;
+                    padding: 10px 20px;
+                    border-radius: 5px;
+                    cursor: pointer;
+                ">Odmietnuť</button>
+            </div>
+        </div>
+    </div>
+    <script>
+    (function() {
+        // Skontroluj, či už bol súhlas
+        const consent = sessionStorage.getItem('cookie_consent');
+        const banner = document.getElementById('cookie-consent-banner');
+        
+        if (!consent && banner) {
+            // Zobraz banner len ak ešte nebol súhlas
+            banner.style.display = 'block';
+            
+            // Nastav margin-bottom pre body (priestor pre banner)
+            document.body.style.marginBottom = '120px';
+        }
+        
+        function setCookieConsent(accepted) {
+            // Uloženie súhlasu do sessionStorage (nevyžaduje cookies)
+            sessionStorage.setItem('cookie_consent', accepted ? 'accepted' : 'rejected');
+            // Skryť banner
+            if (banner) {
+                banner.style.display = 'none';
+                document.body.style.marginBottom = '0';
+            }
+        }
+        
+        const acceptBtn = document.getElementById('accept-cookies');
+        const rejectBtn = document.getElementById('reject-cookies');
+        
+        if (acceptBtn) {
+            acceptBtn.addEventListener('click', function() {
+                setCookieConsent(true);
+            });
+        }
+        
+        if (rejectBtn) {
+            rejectBtn.addEventListener('click', function() {
+                setCookieConsent(false);
+            });
+        }
+    })();
+    </script>
+    """, unsafe_allow_html=True)
+    
+    # Kontrola, či má používateľ povolené cookies (pre ukladanie údajov)
+    # Ak odmietol cookies, zobrazíme informáciu
+    st.markdown("""
+    <script>
+    (function() {
+        const consent = sessionStorage.getItem('cookie_consent');
+        if (consent === 'rejected') {
+            // Používateľ odmietol cookies - zobrazíme informáciu
+            const infoDiv = document.createElement('div');
+            infoDiv.style.cssText = 'padding: 15px; background-color: #fff3cd; border-radius: 5px; margin: 10px 0; border-left: 4px solid #ffc107;';
+            infoDiv.innerHTML = '<strong>ℹ️ Informácia:</strong> Pre automatické prihlásenie pri naskenovaní NFC tagu je potrebný súhlas s cookies. Môžeš použiť alternatívne riešenie - vygenerovať si vlastný QR kód s tvojimi údajmi.';
+            document.body.insertBefore(infoDiv, document.body.firstChild);
+        }
+    })();
+    </script>
+    """, unsafe_allow_html=True)
+    
+    if False:  # Placeholder - banner sa zobrazuje cez JavaScript
+        st.markdown("""
+        <div id="cookie-consent-banner" style="
+            position: fixed;
+            bottom: 0;
+            left: 0;
+            right: 0;
+            background-color: #f0f2f6;
+            padding: 20px;
+            box-shadow: 0 -2px 10px rgba(0,0,0,0.1);
+            z-index: 1000;
+            border-top: 2px solid #FF4B4B;
+        ">
+            <div style="max-width: 1200px; margin: 0 auto; display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 15px;">
+                <div style="flex: 1; min-width: 250px;">
+                    <strong>🍪 Cookies</strong>
+                    <p style="margin: 5px 0 0 0; font-size: 14px; color: #666;">
+                        Táto aplikácia používa cookies na uloženie tvojich údajov (meno, typ členstva) pre automatické prihlásenie pri naskenovaní NFC tagu. Údaje sa ukladajú len lokálne v tvojom telefóne.
+                    </p>
+                </div>
+                <div style="display: flex; gap: 10px;">
+                    <button id="accept-cookies" style="
+                        background-color: #FF4B4B;
+                        color: white;
+                        border: none;
+                        padding: 10px 20px;
+                        border-radius: 5px;
+                        cursor: pointer;
+                        font-weight: 600;
+                    ">Súhlasím</button>
+                    <button id="reject-cookies" style="
+                        background-color: #666;
+                        color: white;
+                        border: none;
+                        padding: 10px 20px;
+                        border-radius: 5px;
+                        cursor: pointer;
+                    ">Odmietnuť</button>
+                </div>
+            </div>
+        </div>
+        <script>
+        (function() {
+            function setCookieConsent(accepted) {
+                // Uloženie súhlasu do sessionStorage (nevyžaduje cookies)
+                sessionStorage.setItem('cookie_consent', accepted ? 'accepted' : 'rejected');
+                // Skryť banner
+                const banner = document.getElementById('cookie-consent-banner');
+                if (banner) {
+                    banner.style.display = 'none';
+                }
+                // Obnov stránku pre aktualizáciu session state
+                window.location.reload();
+            }
+            
+            document.getElementById('accept-cookies').addEventListener('click', function() {
+                setCookieConsent(true);
+            });
+            
+            document.getElementById('reject-cookies').addEventListener('click', function() {
+                setCookieConsent(false);
+            });
+            
+            // Skontroluj, či už bol súhlas
+            const consent = sessionStorage.getItem('cookie_consent');
+            if (consent) {
+                const banner = document.getElementById('cookie-consent-banner');
+                if (banner) {
+                    banner.style.display = 'none';
+                }
+            }
+        })();
+        </script>
+        <style>
+        body {
+            margin-bottom: 120px; /* Priestor pre cookie banner */
+        }
+        </style>
+        """, unsafe_allow_html=True)
+        
+        # Načítanie súhlasu z sessionStorage
+        st.markdown("""
+        <script>
+        (function() {
+            const consent = sessionStorage.getItem('cookie_consent');
+            if (consent) {
+                // Pošli informáciu do Streamlit
+                window.parent.postMessage({type: 'cookie_consent', value: consent}, '*');
+            }
+        })();
+        </script>
+        """, unsafe_allow_html=True)
     
     # Kontrola konfigurácie
     if "gcp_service_account" not in st.secrets:
