@@ -316,63 +316,83 @@ def participant_view(worksheet, query_params=None):
         st.markdown("""
         <script>
         (function() {
-            // Načítanie údajov z localStorage
-            const userData = {
-                name: localStorage.getItem('gym_name') || '',
-                membership: localStorage.getItem('gym_membership') || ''
-            };
-            
-            // Automatický výber času tréningu podľa aktuálneho času
-            const now = new Date();
-            const currentHour = now.getHours();
-            const currentMinute = now.getMinutes();
-            const currentTimeMinutes = currentHour * 60 + currentMinute;
-            
-            let selectedTime = '9:00'; // Predvolená hodnota
-            
-            // Časy tréningov v minútach
-            const training_9_00 = 9 * 60;      // 540 minút
-            const training_17_00 = 17 * 60;    // 1020 minút
-            const training_18_30 = 18 * 60 + 30; // 1110 minút
-            
-            // Pred 9:00 → 9:00
-            if (currentTimeMinutes < training_9_00) {
-                selectedTime = '9:00';
-            }
-            // 9:00-9:59 → 9:00 (ešte neuplynula 1 hodina)
-            else if (training_9_00 <= currentTimeMinutes && currentTimeMinutes < training_9_00 + 60) {
-                selectedTime = '9:00';
-            }
-            // 10:00-16:59 → 17:00 (po uplynutí 1 hodiny od 9:00)
-            else if (training_9_00 + 60 <= currentTimeMinutes && currentTimeMinutes < training_17_00) {
-                selectedTime = '17:00';
-            }
-            // 17:00-17:59 → 17:00 (ešte neuplynula 1 hodina)
-            else if (training_17_00 <= currentTimeMinutes && currentTimeMinutes < training_17_00 + 60) {
-                selectedTime = '17:00';
-            }
-            // 18:00-19:29 → 18:30 (po 18:00 sa vyberie 18:30)
-            else if (currentTimeMinutes >= 18 * 60 && currentTimeMinutes < training_18_30 + 60) {
-                selectedTime = '18:30';
-            }
-            // 19:30+ → 9:00 (na ďalší deň, po uplynutí 1 hodiny od 18:30)
-            else {
-                selectedTime = '9:00';
+            // Počkáme, kým sa DOM načíta (pre iPhone kompatibilitu)
+            if (document.readyState === 'loading') {
+                document.addEventListener('DOMContentLoaded', processNFC);
+            } else {
+                processNFC();
             }
             
-            // Ak sú všetky údaje dostupné, presmeruj s parametrami
-            if (userData.name && userData.membership) {
-                const baseUrl = window.location.origin + window.location.pathname;
-                const params = new URLSearchParams({
-                    view: 'participant',
-                    name: userData.name,
-                    membership: userData.membership,
-                    time: selectedTime, // Automaticky vybraný čas
-                    auto: '1'
-                });
-                window.location.href = baseUrl + '?' + params.toString();
+            function processNFC() {
+                try {
+                    // Načítanie údajov z localStorage
+                    const userData = {
+                        name: localStorage.getItem('gym_name') || '',
+                        membership: localStorage.getItem('gym_membership') || ''
+                    };
+                    
+                    console.log('NFC Mode - Načítané údaje:', userData);
+                    
+                    // Automatický výber času tréningu podľa aktuálneho času
+                    const now = new Date();
+                    const currentHour = now.getHours();
+                    const currentMinute = now.getMinutes();
+                    const currentTimeMinutes = currentHour * 60 + currentMinute;
+                    
+                    let selectedTime = '9:00'; // Predvolená hodnota
+                    
+                    // Časy tréningov v minútach
+                    const training_9_00 = 9 * 60;      // 540 minút
+                    const training_17_00 = 17 * 60;    // 1020 minút
+                    const training_18_30 = 18 * 60 + 30; // 1110 minút
+                    
+                    // Pred 9:00 → 9:00
+                    if (currentTimeMinutes < training_9_00) {
+                        selectedTime = '9:00';
+                    }
+                    // 9:00-9:59 → 9:00 (ešte neuplynula 1 hodina)
+                    else if (training_9_00 <= currentTimeMinutes && currentTimeMinutes < training_9_00 + 60) {
+                        selectedTime = '9:00';
+                    }
+                    // 10:00-16:59 → 17:00 (po uplynutí 1 hodiny od 9:00)
+                    else if (training_9_00 + 60 <= currentTimeMinutes && currentTimeMinutes < training_17_00) {
+                        selectedTime = '17:00';
+                    }
+                    // 17:00-17:59 → 17:00 (ešte neuplynula 1 hodina)
+                    else if (training_17_00 <= currentTimeMinutes && currentTimeMinutes < training_17_00 + 60) {
+                        selectedTime = '17:00';
+                    }
+                    // 18:00-19:29 → 18:30 (po 18:00 sa vyberie 18:30)
+                    else if (currentTimeMinutes >= 18 * 60 && currentTimeMinutes < training_18_30 + 60) {
+                        selectedTime = '18:30';
+                    }
+                    // 19:30+ → 9:00 (na ďalší deň, po uplynutí 1 hodiny od 18:30)
+                    else {
+                        selectedTime = '9:00';
+                    }
+                    
+                    console.log('NFC Mode - Vybratý čas:', selectedTime);
+                    
+                    // Ak sú všetky údaje dostupné, presmeruj s parametrami
+                    if (userData.name && userData.membership) {
+                        const baseUrl = window.location.origin + window.location.pathname;
+                        const params = new URLSearchParams({
+                            view: 'participant',
+                            name: userData.name,
+                            membership: userData.membership,
+                            time: selectedTime, // Automaticky vybraný čas
+                            auto: '1'
+                        });
+                        const newUrl = baseUrl + '?' + params.toString();
+                        console.log('NFC Mode - Presmerovanie na:', newUrl);
+                        window.location.href = newUrl;
+                    } else {
+                        console.log('NFC Mode - Údaje chýbajú, pokračujeme normálne');
+                    }
+                } catch (e) {
+                    console.error('NFC Mode - Chyba:', e);
+                }
             }
-            // Ak chýbajú údaje, JavaScript už nič nerobí - aplikácia pokračuje normálne
         })();
         </script>
         """, unsafe_allow_html=True)
@@ -448,23 +468,85 @@ def participant_view(worksheet, query_params=None):
         - Automaticky ťa prihlási
         """)
         
+        # Debug sekcia - zobrazenie aktuálnych údajov v localStorage
+        st.markdown("### 🔍 Kontrola uložených údajov")
+        st.markdown("""
+        <script>
+        (function() {
+            const savedName = localStorage.getItem('gym_name');
+            const savedMembership = localStorage.getItem('gym_membership');
+            
+            if (savedName && savedMembership) {
+                const infoDiv = document.createElement('div');
+                infoDiv.style.cssText = 'padding: 10px; background-color: #d4edda; border-radius: 5px; margin: 10px 0;';
+                infoDiv.innerHTML = '<strong>✅ Uložené údaje:</strong><br>Meno: ' + savedName + '<br>Typ členstva: ' + savedMembership;
+                document.currentScript.parentElement.appendChild(infoDiv);
+            } else {
+                const infoDiv = document.createElement('div');
+                infoDiv.style.cssText = 'padding: 10px; background-color: #fff3cd; border-radius: 5px; margin: 10px 0;';
+                infoDiv.innerHTML = '<strong>⚠️ Žiadne údaje nie sú uložené</strong>';
+                document.currentScript.parentElement.appendChild(infoDiv);
+            }
+        })();
+        </script>
+        """, unsafe_allow_html=True)
+        
         save_name = st.text_input("Meno a priezvisko", key="save_name", placeholder="Zadaj svoje meno...")
         save_membership = st.selectbox("Typ členstva", MEMBERSHIP_TYPES, key="save_membership", index=1)
         # Čas sa neukladá - vždy sa vyberie automaticky podľa aktuálneho času
         
         if st.button("💾 Uložiť údaje", key="save_data"):
             if save_name.strip():
-                st.markdown(f"""
-                <script>
-                localStorage.setItem('gym_name', {json.dumps(save_name.strip())});
-                localStorage.setItem('gym_membership', {json.dumps(save_membership)});
-                // Čas sa neukladá - vždy sa vyberie automaticky
-                alert('✅ Údaje uložené! Teraz môžeš naskenovať NFC čip alebo QR kód v gyme.');
-                </script>
-                """, unsafe_allow_html=True)
-                st.success("✅ Údaje uložené! Teraz môžeš naskenovať NFC čip alebo QR kód v gyme.")
+                # Použijeme session state na uloženie údajov, ktoré sa potom uložia do localStorage cez JavaScript
+                st.session_state['save_to_localstorage'] = {
+                    'name': save_name.strip(),
+                    'membership': save_membership
+                }
+                st.success("✅ Údaje pripravené na uloženie!")
+                st.rerun()
             else:
                 st.warning("⚠️ Prosím, zadaj meno.")
+    
+    # JavaScript na uloženie údajov do localStorage (spustí sa po rerun)
+    if 'save_to_localstorage' in st.session_state:
+        save_data = st.session_state['save_to_localstorage']
+        st.markdown(f"""
+        <script>
+        (function() {{
+            // Počkáme, kým sa DOM načíta (pre iPhone kompatibilitu)
+            function saveToLocalStorage() {{
+                try {{
+                    // Uloženie do localStorage
+                    localStorage.setItem('gym_name', {json.dumps(save_data['name'])});
+                    localStorage.setItem('gym_membership', {json.dumps(save_data['membership'])});
+                    
+                    // Overenie, že sa údaje uložili
+                    const savedName = localStorage.getItem('gym_name');
+                    const savedMembership = localStorage.getItem('gym_membership');
+                    
+                    if (savedName && savedMembership) {{
+                        alert('✅ Údaje úspešne uložené!\\n\\nMeno: ' + savedName + '\\nTyp členstva: ' + savedMembership + '\\n\\nTeraz môžeš naskenovať NFC čip alebo QR kód v gyme.');
+                    }} else {{
+                        alert('⚠️ Chyba pri ukladaní údajov. Skús to znova.');
+                    }}
+                }} catch (e) {{
+                    alert('⚠️ Chyba: ' + e.message);
+                    console.error('Chyba pri ukladaní do localStorage:', e);
+                }}
+            }}
+            
+            if (document.readyState === 'loading') {{
+                document.addEventListener('DOMContentLoaded', saveToLocalStorage);
+            }} else {{
+                // Malé oneskorenie pre istotu (pre iPhone)
+                setTimeout(saveToLocalStorage, 100);
+            }}
+        }})();
+        </script>
+        """, unsafe_allow_html=True)
+        
+        # Odstránime flag z session state, aby sa JavaScript nespustil znova
+        del st.session_state['save_to_localstorage']
     
     st.markdown("---")
     
@@ -1064,12 +1146,12 @@ def trainer_view(worksheet):
     # Tlačidlá na obnovenie a odhlásenie
     col1, col2 = st.columns([3, 1])
     with col1:
-        if st.button("🔄 Obnoviť údaje", use_container_width=True):
-            st.rerun()
+    if st.button("🔄 Obnoviť údaje", use_container_width=True):
+        st.rerun()
     with col2:
         if st.button("🚪 Odhlásiť sa", use_container_width=True):
             st.session_state.trainer_authenticated = False
-            st.rerun()
+        st.rerun()
     
     # Načítanie dát
     df = get_today_attendance(worksheet)
