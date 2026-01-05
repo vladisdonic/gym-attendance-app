@@ -362,24 +362,37 @@ def participant_view(worksheet, query_params=None):
             
             // Ak sú všetky údaje dostupné, presmeruj s parametrami
             if (userData.name && userData.membership) {
-                const baseUrl = 'https://giantgym.streamlit.app/?view=participant';
+                const baseUrl = window.location.origin + window.location.pathname;
                 const params = new URLSearchParams({
+                    view: 'participant',
                     name: userData.name,
                     membership: userData.membership,
                     time: selectedTime, // Automaticky vybraný čas
                     auto: '1'
                 });
-                window.location.href = baseUrl + '&' + params.toString();
-            } else {
-                // Ak chýbajú údaje, zobraz formulár
-                console.log('Chýbajú údaje v localStorage');
+                window.location.href = baseUrl + '?' + params.toString();
             }
+            // Ak chýbajú údaje, JavaScript už nič nerobí - aplikácia pokračuje normálne
         })();
         </script>
         """, unsafe_allow_html=True)
         
+        # Zobrazíme informáciu - ak JavaScript presmeroval, táto časť sa nezobrazí
+        # Ak údaje chýbajú, zobrazíme varovanie a pokračujeme ďalej
         st.info("📱 Načítavam tvoje údaje a vyberám najbližší tréning...")
-        return  # Presmerovanie sa deje cez JavaScript
+        
+        # Ak údaje chýbajú, JavaScript nepresmeruje a zobrazíme varovanie
+        st.warning("⚠️ **Údaje nie sú uložené v telefóne.**")
+        st.markdown("""
+        **Aby NFC/QR kód fungoval automaticky, musíš si najprv uložiť údaje:**
+        
+        1. Klikni na "💾 Uložiť údaje pre NFC" nižšie
+        2. Vyplň svoje meno a typ členstva  
+        3. Klikni na "💾 Uložiť údaje"
+        4. Potom môžeš naskenovať NFC čip alebo QR kód znova
+        """)
+        st.markdown("---")
+        # Pokračujeme ďalej, aby sa zobrazil formulár
     
     # PÔVODNÝ SPÔSOB - URL parametre (zachovaný)
     # Dekódovanie URL parametrov (pre diakritiku a špeciálne znaky)
