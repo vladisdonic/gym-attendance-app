@@ -570,26 +570,26 @@ def participant_view(worksheet, query_params=None):
                 }
                 query_string = "&".join([f"{k}={quote(str(v))}" for k, v in params.items()])
                 url = f"{base_url}&{query_string}&auto=1"
+                
+                # Generovanie QR kódu
+                try:
+                    qr = qrcode.QRCode(version=1, box_size=10, border=5)
+                    qr.add_data(url)
+                    qr.make(fit=True)
+                    img = qr.make_image(fill_color="black", back_color="white")
                     
-                    # Generovanie QR kódu
-                    try:
-                        qr = qrcode.QRCode(version=1, box_size=10, border=5)
-                        qr.add_data(url)
-                        qr.make(fit=True)
-                        img = qr.make_image(fill_color="black", back_color="white")
-                        
-                        qr_img_buffer = io.BytesIO()
-                        img.save(qr_img_buffer, format='PNG')
-                        qr_img_buffer.seek(0)
-                        
-                        st.session_state['personal_qr_code'] = qr_img_buffer.getvalue()
-                        st.session_state['personal_qr_url'] = url
-                        st.session_state['personal_qr_filename'] = f"giantgym_{save_name.strip().replace(' ', '_')}.png"
-                        st.rerun()
-                    except Exception as e:
-                        st.error(f"❌ Chyba pri generovaní QR kódu: {e}")
-                else:
-                    st.warning("⚠️ Prosím, zadaj meno.")
+                    qr_img_buffer = io.BytesIO()
+                    img.save(qr_img_buffer, format='PNG')
+                    qr_img_buffer.seek(0)
+                    
+                    st.session_state['personal_qr_code'] = qr_img_buffer.getvalue()
+                    st.session_state['personal_qr_url'] = url
+                    st.session_state['personal_qr_filename'] = f"giantgym_{save_name.strip().replace(' ', '_')}.png"
+                    st.rerun()
+                except Exception as e:
+                    st.error(f"❌ Chyba pri generovaní QR kódu: {e}")
+            else:
+                st.warning("⚠️ Prosím, zadaj meno.")
         
         # Zobrazenie vygenerovaného QR kódu
         if st.session_state.get('personal_qr_code'):
