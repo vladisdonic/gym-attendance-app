@@ -311,11 +311,19 @@ def participant_view(worksheet, query_params=None):
     # Detekcia NFC módu (nový spôsob)
     nfc_mode = query_params.get("nfc", "0") == "1"
     
-    # Ak je NFC mód, načítame údaje z localStorage a automaticky vyberieme čas
+    # Ak je NFC mód, načítame údaje z cookies/localStorage a automaticky vyberieme čas
     if nfc_mode:
         st.markdown("""
         <script>
         (function() {
+            // Funkcia na načítanie cookie
+            function getCookie(name) {
+                const value = `; ${document.cookie}`;
+                const parts = value.split(`; ${name}=`);
+                if (parts.length === 2) return decodeURIComponent(parts.pop().split(';').shift());
+                return '';
+            }
+            
             // Počkáme, kým sa DOM načíta (pre iPhone kompatibilitu)
             if (document.readyState === 'loading') {
                 document.addEventListener('DOMContentLoaded', processNFC);
@@ -325,11 +333,23 @@ def participant_view(worksheet, query_params=None):
             
             function processNFC() {
                 try {
-                    // Načítanie údajov z localStorage
-                    const userData = {
-                        name: localStorage.getItem('gym_name') || '',
-                        membership: localStorage.getItem('gym_membership') || ''
+                    // Načítanie údajov - najprv skúsime cookies (lepšie pre Safari), potom localStorage
+                    let userData = {
+                        name: getCookie('gym_name') || '',
+                        membership: getCookie('gym_membership') || ''
                     };
+                    
+                    // Ak cookies nefungujú, skús localStorage
+                    if (!userData.name || !userData.membership) {
+                        try {
+                            userData = {
+                                name: localStorage.getItem('gym_name') || userData.name || '',
+                                membership: localStorage.getItem('gym_membership') || userData.membership || ''
+                            };
+                        } catch (e) {
+                            console.log('localStorage nie je dostupné:', e);
+                        }
+                    }
                     
                     console.log('NFC Mode - Načítané údaje:', userData);
                     
@@ -468,13 +488,31 @@ def participant_view(worksheet, query_params=None):
         - Automaticky ťa prihlási
         """)
         
-        # Debug sekcia - zobrazenie aktuálnych údajov v localStorage
+        # Debug sekcia - zobrazenie aktuálnych údajov v cookies/localStorage
         st.markdown("### 🔍 Kontrola uložených údajov")
         st.markdown("""
         <script>
         (function() {
-            const savedName = localStorage.getItem('gym_name');
-            const savedMembership = localStorage.getItem('gym_membership');
+            // Funkcia na načítanie cookie
+            function getCookie(name) {
+                const value = `; ${document.cookie}`;
+                const parts = value.split(`; ${name}=`);
+                if (parts.length === 2) return decodeURIComponent(parts.pop().split(';').shift());
+                return '';
+            }
+            
+            // Skúsime najprv cookies, potom localStorage
+            let savedName = getCookie('gym_name') || '';
+            let savedMembership = getCookie('gym_membership') || '';
+            
+            if (!savedName || !savedMembership) {
+                try {
+                    savedName = localStorage.getItem('gym_name') || savedName || '';
+                    savedMembership = localStorage.getItem('gym_membership') || savedMembership || '';
+                } catch (e) {
+                    console.log('localStorage nie je dostupné:', e);
+                }
+            }
             
             if (savedName && savedMembership) {
                 const infoDiv = document.createElement('div');
@@ -495,34 +533,118 @@ def participant_view(worksheet, query_params=None):
         save_membership = st.selectbox("Typ členstva", MEMBERSHIP_TYPES, key="save_membership", index=1)
         # Čas sa neukladá - vždy sa vyberie automaticky podľa aktuálneho času
         
-        if st.button("💾 Uložiť údaje", key="save_data"):
-            if save_name.strip():
-                # Použijeme session state na uloženie údajov, ktoré sa potom uložia do localStorage cez JavaScript
-                st.session_state['save_to_localstorage'] = {
-                    'name': save_name.strip(),
-                    'membership': save_membership
-                }
-                st.success("✅ Údaje pripravené na uloženie!")
-                st.rerun()
-            else:
-                st.warning("⚠️ Prosím, zadaj meno.")
+        col1, col2 = st.columns(2)
+        with col1:
+            if st.button("💾 Uložiť údaje", key="save_data", use_container_width=True):
+                if save_name.strip():
+                    # Použijeme session state na uloženie údajov, ktoré sa potom uložia do cookies/localStorage cez JavaScript
+                    st.session_state['save_to_localstorage'] = {
+                        'name': save_name.strip(),
+                        'membership': save_membership
+                    }
+                    st.success("✅ Údaje pripravené na uloženie!")
+                    st.rerun()
+                else:
+                    st.warning("⚠️ Prosím, zadaj meno.")
+        
+        with col2:
+            if st.button("📱 Generovať QR kód", key="generate_qr", use_container_width=True):
+                if save_name.strip():
+                    # Generovanie URL s parametrami
+                    base_url = "https://giantgym.streamlit.app/?view=participant"
+                    params = {
+                        "name": save_name.strip(),
+                        "membership": save_membership
+                        # time sa nepridá - vyberie sa automaticky
+                        # auto=1 sa pridá v JavaScripte
+                    }
+                    query_string = "&".join([f"{k}={quote(str(v))}" for k, v in params.items()])
+                    url = f"{base_url}&{query_string}&auto=1"
+                    
+                    # Generovanie QR kódu
+                    try:
+                        qr = qrcode.QRCode(version=1, box_size=10, border=5)
+                        qr.add_data(url)
+                        qr.make(fit=True)
+                        img = qr.make_image(fill_color="black", back_color="white")
+                        
+                        qr_img_buffer = io.BytesIO()
+                        img.save(qr_img_buffer, format='PNG')
+                        qr_img_buffer.seek(0)
+                        
+                        st.session_state['personal_qr_code'] = qr_img_buffer.getvalue()
+                        st.session_state['personal_qr_url'] = url
+                        st.session_state['personal_qr_filename'] = f"giantgym_{save_name.strip().replace(' ', '_')}.png"
+                        st.rerun()
+                    except Exception as e:
+                        st.error(f"❌ Chyba pri generovaní QR kódu: {e}")
+                else:
+                    st.warning("⚠️ Prosím, zadaj meno.")
+        
+        # Zobrazenie vygenerovaného QR kódu
+        if st.session_state.get('personal_qr_code'):
+            st.markdown("---")
+            st.markdown("### 📱 Tvoj unikátny QR kód")
+            st.markdown("**Tento QR kód obsahuje tvoje údaje a funguje na všetkých telefónoch (vrátane iPhone).**")
+            st.image(st.session_state['personal_qr_code'], caption="Tvoj QR kód", width=300)
+            
+            if 'personal_qr_url' in st.session_state:
+                st.markdown("### 🔗 URL adresa:")
+                st.text_input(
+                    "Klikni a skopíruj URL",
+                    value=st.session_state['personal_qr_url'],
+                    key="personal_qr_url_display",
+                    help="Klikni do poľa a stlač Ctrl+C (Cmd+C na Mac) alebo vyber text a skopíruj",
+                    label_visibility="visible"
+                )
+            
+            st.download_button(
+                label="📥 Stiahnuť QR kód (.png)",
+                data=st.session_state['personal_qr_code'],
+                file_name=st.session_state.get('personal_qr_filename', 'giantgym_qr.png'),
+                mime="image/png",
+                use_container_width=True
+            )
+            
+            st.info("💡 **Tip:** Ulož si tento QR kód do galérie alebo vytlač. Pri naskenovaní sa automaticky prihlásiš na tréning!")
     
-    # JavaScript na uloženie údajov do localStorage (spustí sa po rerun)
+    # JavaScript na uloženie údajov do cookies a localStorage (spustí sa po rerun)
     if 'save_to_localstorage' in st.session_state:
         save_data = st.session_state['save_to_localstorage']
         st.markdown(f"""
         <script>
         (function() {{
+            // Funkcia na uloženie cookie
+            function setCookie(name, value, days = 365) {{
+                const encodedValue = encodeURIComponent(value);
+                const expires = new Date();
+                expires.setTime(expires.getTime() + (days * 24 * 60 * 60 * 1000));
+                document.cookie = `${{name}}=${{encodedValue}};expires=${{expires.toUTCString()}};path=/;SameSite=Lax`;
+            }}
+            
             // Počkáme, kým sa DOM načíta (pre iPhone kompatibilitu)
-            function saveToLocalStorage() {{
+            function saveUserData() {{
                 try {{
-                    // Uloženie do localStorage
-                    localStorage.setItem('gym_name', {json.dumps(save_data['name'])});
-                    localStorage.setItem('gym_membership', {json.dumps(save_data['membership'])});
+                    const name = {json.dumps(save_data['name'])};
+                    const membership = {json.dumps(save_data['membership'])};
+                    
+                    // Uloženie do cookies (lepšie pre Safari/iPhone)
+                    setCookie('gym_name', name);
+                    setCookie('gym_membership', membership);
+                    
+                    // Uloženie do localStorage (záložné riešenie)
+                    try {{
+                        localStorage.setItem('gym_name', name);
+                        localStorage.setItem('gym_membership', membership);
+                    }} catch (e) {{
+                        console.log('localStorage nie je dostupné, používame len cookies:', e);
+                    }}
                     
                     // Overenie, že sa údaje uložili
-                    const savedName = localStorage.getItem('gym_name');
-                    const savedMembership = localStorage.getItem('gym_membership');
+                    const savedName = document.cookie.match(/gym_name=([^;]+)/) ? 
+                        decodeURIComponent(document.cookie.match(/gym_name=([^;]+)/)[1]) : '';
+                    const savedMembership = document.cookie.match(/gym_membership=([^;]+)/) ? 
+                        decodeURIComponent(document.cookie.match(/gym_membership=([^;]+)/)[1]) : '';
                     
                     if (savedName && savedMembership) {{
                         alert('✅ Údaje úspešne uložené!\\n\\nMeno: ' + savedName + '\\nTyp členstva: ' + savedMembership + '\\n\\nTeraz môžeš naskenovať NFC čip alebo QR kód v gyme.');
@@ -531,15 +653,15 @@ def participant_view(worksheet, query_params=None):
                     }}
                 }} catch (e) {{
                     alert('⚠️ Chyba: ' + e.message);
-                    console.error('Chyba pri ukladaní do localStorage:', e);
+                    console.error('Chyba pri ukladaní údajov:', e);
                 }}
             }}
             
             if (document.readyState === 'loading') {{
-                document.addEventListener('DOMContentLoaded', saveToLocalStorage);
+                document.addEventListener('DOMContentLoaded', saveUserData);
             }} else {{
                 // Malé oneskorenie pre istotu (pre iPhone)
-                setTimeout(saveToLocalStorage, 100);
+                setTimeout(saveUserData, 100);
             }}
         }})();
         </script>
@@ -819,7 +941,7 @@ def wallet_pass_view():
                         st.rerun()
                     except Exception as e:
                         st.error(f"❌ Chyba pri generovaní: {e}")
-                else:
+            else:
                     st.warning("⚠️ Prosím, vyplň všetky polia.")
         
         # Download button mimo formulára (ale vnútri tab1)
@@ -1146,12 +1268,12 @@ def trainer_view(worksheet):
     # Tlačidlá na obnovenie a odhlásenie
     col1, col2 = st.columns([3, 1])
     with col1:
-        if st.button("🔄 Obnoviť údaje", use_container_width=True):
-            st.rerun()
+    if st.button("🔄 Obnoviť údaje", use_container_width=True):
+        st.rerun()
     with col2:
         if st.button("🚪 Odhlásiť sa", use_container_width=True):
             st.session_state.trainer_authenticated = False
-            st.rerun()
+        st.rerun()
     
     # Načítanie dát
     df = get_today_attendance(worksheet)
