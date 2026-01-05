@@ -529,37 +529,25 @@ def participant_view(worksheet, query_params=None):
         </script>
         """, unsafe_allow_html=True)
         
-        save_name = st.text_input("Meno a priezvisko", key="save_name", placeholder="Zadaj svoje meno...")
-        save_membership = st.selectbox("Typ členstva", MEMBERSHIP_TYPES, key="save_membership", index=1)
-        # Čas sa neukladá - vždy sa vyberie automaticky podľa aktuálneho času
+        st.markdown("**📱 Odporúčané riešenie pre iPhone:** Použi tlačidlo 'Generovať QR kód' - vytvorí sa ti unikátny QR kód, ktorý funguje na všetkých telefónoch bez potreby cookies/localStorage.")
+        st.markdown("---")
         
-        col1, col2 = st.columns(2)
-        with col1:
-            if st.button("💾 Uložiť údaje", key="save_data", use_container_width=True):
-                if save_name.strip():
-                    # Použijeme session state na uloženie údajov, ktoré sa potom uložia do cookies/localStorage cez JavaScript
-                    st.session_state['save_to_localstorage'] = {
-                        'name': save_name.strip(),
-                        'membership': save_membership
-                    }
-                    st.success("✅ Údaje pripravené na uloženie!")
-                    st.rerun()
-                else:
-                    st.warning("⚠️ Prosím, zadaj meno.")
+        save_name = st.text_input("Meno a priezvisko *", key="save_name", placeholder="Zadaj svoje meno...")
+        save_membership = st.selectbox("Typ členstva *", MEMBERSHIP_TYPES, key="save_membership", index=1)
         
-        with col2:
-            if st.button("📱 Generovať QR kód", key="generate_qr", use_container_width=True):
-                if save_name.strip():
-                    # Generovanie URL s parametrami
-                    base_url = "https://giantgym.streamlit.app/?view=participant"
-                    params = {
-                        "name": save_name.strip(),
-                        "membership": save_membership
-                        # time sa nepridá - vyberie sa automaticky
-                        # auto=1 sa pridá v JavaScripte
-                    }
-                    query_string = "&".join([f"{k}={quote(str(v))}" for k, v in params.items()])
-                    url = f"{base_url}&{query_string}&auto=1"
+        st.markdown("**💡 Tip:** Čas tréningu sa vyberie automaticky podľa aktuálneho času pri naskenovaní QR kódu.")
+        
+        if st.button("📱 Generovať QR kód (Odporúčané pre iPhone)", key="generate_qr", use_container_width=True, type="primary"):
+            if save_name.strip():
+                # Generovanie URL s parametrami (bez času - vyberie sa automaticky)
+                base_url = "https://giantgym.streamlit.app/?view=participant"
+                params = {
+                    "name": save_name.strip(),
+                    "membership": save_membership
+                    # time sa nepridá - vyberie sa automaticky podľa aktuálneho času
+                }
+                query_string = "&".join([f"{k}={quote(str(v))}" for k, v in params.items()])
+                url = f"{base_url}&{query_string}&auto=1"
                     
                     # Generovanie QR kódu
                     try:
@@ -584,19 +572,22 @@ def participant_view(worksheet, query_params=None):
         # Zobrazenie vygenerovaného QR kódu
         if st.session_state.get('personal_qr_code'):
             st.markdown("---")
+            st.success("✅ **QR kód vygenerovaný!**")
             st.markdown("### 📱 Tvoj unikátny QR kód")
-            st.markdown("**Tento QR kód obsahuje tvoje údaje a funguje na všetkých telefónoch (vrátane iPhone).**")
-            st.image(st.session_state['personal_qr_code'], caption="Tvoj QR kód", width=300)
+            st.markdown("""
+            **✅ Tento QR kód funguje na všetkých telefónoch (vrátane iPhone)!**
+            
+            - Obsahuje tvoje meno a typ členstva
+            - Čas tréningu sa vyberie automaticky podľa aktuálneho času
+            - Automaticky ťa prihlási pri naskenovaní
+            - **Nezávisí od cookies/localStorage** - funguje vždy!
+            """)
+            st.image(st.session_state['personal_qr_code'], caption="Tvoj QR kód - naskenuj pri príchode do gymu", width=300)
             
             if 'personal_qr_url' in st.session_state:
                 st.markdown("### 🔗 URL adresa:")
-                st.text_input(
-                    "Klikni a skopíruj URL",
-                    value=st.session_state['personal_qr_url'],
-                    key="personal_qr_url_display",
-                    help="Klikni do poľa a stlač Ctrl+C (Cmd+C na Mac) alebo vyber text a skopíruj",
-                    label_visibility="visible"
-                )
+                st.code(st.session_state['personal_qr_url'], language="text")
+                st.markdown("💡 *Môžeš si túto URL uložiť ako bookmark alebo ju použiť pre NFC tag*")
             
             st.download_button(
                 label="📥 Stiahnuť QR kód (.png)",
@@ -606,7 +597,24 @@ def participant_view(worksheet, query_params=None):
                 use_container_width=True
             )
             
-            st.info("💡 **Tip:** Ulož si tento QR kód do galérie alebo vytlač. Pri naskenovaní sa automaticky prihlásiš na tréning!")
+            st.info("💡 **Ako používať:** Ulož si tento QR kód do galérie alebo vytlač. Pri príchode do gymu ho naskenuj fotoaparátom a automaticky sa prihlásiš na tréning!")
+        
+        # Sekundárne riešenie - ukladanie do cookies/localStorage (pre NFC tag v gyme)
+        st.markdown("---")
+        st.markdown("### 🔧 Alternatívne riešenie (pre NFC tag v gyme)")
+        st.markdown("**Ak máš v gyme NFC tag s URL `?nfc=1`, môžeš si uložiť údaje do telefónu:**")
+        
+        if st.button("💾 Uložiť údaje pre NFC tag", key="save_data", use_container_width=True):
+            if save_name.strip():
+                # Použijeme session state na uloženie údajov, ktoré sa potom uložia do cookies/localStorage cez JavaScript
+                st.session_state['save_to_localstorage'] = {
+                    'name': save_name.strip(),
+                    'membership': save_membership
+                }
+                st.success("✅ Údaje pripravené na uloženie!")
+                st.rerun()
+            else:
+                st.warning("⚠️ Prosím, zadaj meno.")
     
     # JavaScript na uloženie údajov do cookies a localStorage (spustí sa po rerun)
     if 'save_to_localstorage' in st.session_state:
@@ -1268,12 +1276,12 @@ def trainer_view(worksheet):
     # Tlačidlá na obnovenie a odhlásenie
     col1, col2 = st.columns([3, 1])
     with col1:
-        if st.button("🔄 Obnoviť údaje", use_container_width=True):
-            st.rerun()
+    if st.button("🔄 Obnoviť údaje", use_container_width=True):
+        st.rerun()
     with col2:
         if st.button("🚪 Odhlásiť sa", use_container_width=True):
             st.session_state.trainer_authenticated = False
-            st.rerun()
+        st.rerun()
     
     # Načítanie dát
     df = get_today_attendance(worksheet)
