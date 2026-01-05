@@ -1307,8 +1307,8 @@ def trainer_view(worksheet):
     # Tlačidlá na obnovenie a odhlásenie
     col1, col2 = st.columns([3, 1])
     with col1:
-        if st.button("🔄 Obnoviť údaje", use_container_width=True):
-            st.rerun()
+    if st.button("🔄 Obnoviť údaje", use_container_width=True):
+        st.rerun()
     with col2:
         if st.button("🚪 Odhlásiť sa", use_container_width=True):
             st.session_state.trainer_authenticated = False
@@ -1399,7 +1399,7 @@ def trainer_view(worksheet):
 def main():
     """Hlavná funkcia aplikácie."""
     
-    # CSS na skrytie akéhokoľvek zobrazeného JavaScript kódu
+    # CSS na skrytie akéhokoľvek zobrazeného JavaScript kódu a HTML elementov s JavaScript kódom
     st.markdown("""
     <style>
     /* Skryť akýkoľvek zobrazený JavaScript kód */
@@ -1408,21 +1408,51 @@ def main():
         visibility: hidden !important;
     }
     /* Skryť text obsahujúci })(); alebo podobný JavaScript kód */
-    *:contains("})();") {
+    p:contains("})();"),
+    div:contains("})();"),
+    span:contains("})();") {
+        display: none !important;
+        visibility: hidden !important;
+        height: 0 !important;
+        width: 0 !important;
+        overflow: hidden !important;
+    }
+    /* Skryť akékoľvek prázdne alebo neviditeľné elementy s JavaScript kódom */
+    *[style*="display: none"]:contains("})();"),
+    *[style*="visibility: hidden"]:contains("})();") {
         display: none !important;
     }
     </style>
-    """, unsafe_allow_html=True)
-    
-    # Cookie Consent Banner - kontrola súhlasu
-    # Súhlas sa kontroluje cez JavaScript a sessionStorage (nevyžaduje cookies)
-    st.markdown("""
     <script>
     (function() {
-        // Skontroluj, či už bol súhlas
+        // Skryť akékoľvek zobrazené JavaScript kódy po načítaní stránky
+        function hideJavaScriptCode() {
+            const allElements = document.querySelectorAll('*');
+            allElements.forEach(function(el) {
+                const text = el.textContent || el.innerText || '';
+                if (text.includes('})();') && !el.closest('script')) {
+                    el.style.display = 'none';
+                    el.style.visibility = 'hidden';
+                    el.style.height = '0';
+                    el.style.width = '0';
+                    el.style.overflow = 'hidden';
+                }
+            });
+        }
+        
+        // Spustiť po načítaní DOM
+        if (document.readyState === 'loading') {
+            document.addEventListener('DOMContentLoaded', hideJavaScriptCode);
+        } else {
+            hideJavaScriptCode();
+        }
+        
+        // Spustiť aj po úplnom načítaní stránky
+        window.addEventListener('load', hideJavaScriptCode);
+        
+        // Skontroluj, či už bol súhlas s cookies
         const consent = sessionStorage.getItem('cookie_consent');
         if (consent) {
-            // Súhlas už bol daný, skryť banner
             const banner = document.getElementById('cookie-consent-banner');
             if (banner) {
                 banner.style.display = 'none';
@@ -1476,25 +1506,27 @@ def main():
     </div>
     <script>
     (function() {
-        // Skontroluj, či už bol súhlas
         const consent = sessionStorage.getItem('cookie_consent');
         const banner = document.getElementById('cookie-consent-banner');
         
         if (!consent && banner) {
-            // Zobraz banner len ak ešte nebol súhlas
             banner.style.display = 'block';
-            
-            // Nastav margin-bottom pre body (priestor pre banner)
             document.body.style.marginBottom = '120px';
         }
         
         function setCookieConsent(accepted) {
-            // Uloženie súhlasu do sessionStorage (nevyžaduje cookies)
             sessionStorage.setItem('cookie_consent', accepted ? 'accepted' : 'rejected');
-            // Skryť banner
             if (banner) {
                 banner.style.display = 'none';
                 document.body.style.marginBottom = '0';
+            }
+            
+            // Ak odmietol cookies, zobrazíme informáciu
+            if (!accepted) {
+                const infoDiv = document.createElement('div');
+                infoDiv.style.cssText = 'padding: 15px; background-color: #fff3cd; border-radius: 5px; margin: 10px 0; border-left: 4px solid #ffc107;';
+                infoDiv.innerHTML = '<strong>ℹ️ Informácia:</strong> Pre automatické prihlásenie pri naskenovaní NFC tagu je potrebný súhlas s cookies. Môžeš použiť alternatívne riešenie - vygenerovať si vlastný QR kód s tvojimi údajmi.';
+                document.body.insertBefore(infoDiv, document.body.firstChild);
             }
         }
         
@@ -1512,18 +1544,9 @@ def main():
                 setCookieConsent(false);
             });
         }
-    })();
-    </script>
-    """, unsafe_allow_html=True)
-    
-    # Kontrola, či má používateľ povolené cookies (pre ukladanie údajov)
-    # Ak odmietol cookies, zobrazíme informáciu
-    st.markdown("""
-    <script>
-    (function() {
-        const consent = sessionStorage.getItem('cookie_consent');
+        
+        // Skontroluj, či už bol súhlas odmietnutý
         if (consent === 'rejected') {
-            // Používateľ odmietol cookies - zobrazíme informáciu
             const infoDiv = document.createElement('div');
             infoDiv.style.cssText = 'padding: 15px; background-color: #fff3cd; border-radius: 5px; margin: 10px 0; border-left: 4px solid #ffc107;';
             infoDiv.innerHTML = '<strong>ℹ️ Informácia:</strong> Pre automatické prihlásenie pri naskenovaní NFC tagu je potrebný súhlas s cookies. Môžeš použiť alternatívne riešenie - vygenerovať si vlastný QR kód s tvojimi údajmi.';
