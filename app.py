@@ -120,10 +120,14 @@ def get_or_create_sheet(client, spreadsheet_id):
         return None
 
 
-def add_attendance(worksheet, name, membership_type, training_time=""):
+def add_attendance(worksheet, name, membership_type, training_time="", client_timestamp=None):
     """Pridanie záznamu o účasti."""
     try:
-        timestamp = datetime.now().strftime("%H:%M:%S")
+        # Použiť čas klienta ak je k dispozícii, inak serverový čas (fallback)
+        if client_timestamp:
+            timestamp = client_timestamp
+        else:
+            timestamp = datetime.now().strftime("%H:%M:%S")
         row = [timestamp, name, membership_type, training_time, ""]
         worksheet.append_row(row)
         return True
@@ -774,6 +778,57 @@ def participant_view(worksheet, query_params=None):
             help=""
         )
         
+        # Hidden field pre čas klienta (získaný cez JavaScript)
+        client_time = st.text_input(
+            "client_time",
+            key="client_time",
+            label_visibility="collapsed",
+            help="",
+            value=""
+        )
+        
+        # JavaScript na nastavenie času klienta pred odoslaním formulára
+        st.markdown("""
+        <script>
+        (function() {
+            // Funkcia na získanie aktuálneho času klienta
+            function getClientTime() {
+                const now = new Date();
+                const hours = String(now.getHours()).padStart(2, '0');
+                const minutes = String(now.getMinutes()).padStart(2, '0');
+                const seconds = String(now.getSeconds()).padStart(2, '0');
+                return hours + ':' + minutes + ':' + seconds;
+            }
+            
+            // Nastaviť čas klienta do hidden fieldu
+            function setClientTime() {
+                const timeInput = document.querySelector('input[aria-label*="client_time"]');
+                if (timeInput) {
+                    timeInput.value = getClientTime();
+                }
+            }
+            
+            // Nastaviť čas pri načítaní stránky
+            if (document.readyState === 'loading') {
+                document.addEventListener('DOMContentLoaded', setClientTime);
+            } else {
+                setClientTime();
+            }
+            
+            // Aktualizovať čas pred odoslaním formulára
+            const form = document.querySelector('form[data-testid*="attendance_form"]');
+            if (form) {
+                form.addEventListener('submit', function() {
+                    setClientTime();
+                });
+            }
+            
+            // Aktualizovať čas každú sekundu (pre prípad, že používateľ čaká)
+            setInterval(setClientTime, 1000);
+        })();
+        </script>
+        """, unsafe_allow_html=True)
+        
         submitted = st.form_submit_button(
             "✅ Prihlásiť sa",
             use_container_width=True,
@@ -789,8 +844,10 @@ def participant_view(worksheet, query_params=None):
             
             # Kontrola honeypot (musí byť prázdny)
             if not honeypot or not honeypot.strip():
+                # Získať čas klienta z JavaScriptu (ak je k dispozícii)
+                client_timestamp = client_time if client_time else None
                 # Automatické odoslanie
-                if add_attendance(worksheet, final_name, final_membership, final_time):
+                if add_attendance(worksheet, final_name, final_membership, final_time, client_timestamp):
                     st.success("🎉 Úspešne prihlásený/á!")
                     st.balloons()
                     
@@ -815,7 +872,9 @@ def participant_view(worksheet, query_params=None):
             elif not training_time:
                 st.warning("⚠️ Prosím, vyber čas tréningu.")
             else:
-                if add_attendance(worksheet, name.strip(), membership, training_time):
+                # Získať čas klienta z JavaScriptu (ak je k dispozícii)
+                client_timestamp = client_time if client_time else None
+                if add_attendance(worksheet, name.strip(), membership, training_time, client_timestamp):
                     st.success("🎉 Úspešne prihlásený/á!")
                     st.balloons()
                     
