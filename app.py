@@ -424,20 +424,58 @@ def participant_view(worksheet, query_params=None):
             
             // Počkáme, kým sa DOM načíta (pre iPhone kompatibilitu)
             async function initNFC() {
+                console.log('🚀 NFC Mode - Inicializácia začala');
                 // Malé oneskorenie pre istotu, aby sa IndexedDB správne inicializoval
-                await new Promise(resolve => setTimeout(resolve, 100));
+                await new Promise(resolve => setTimeout(resolve, 200));
+                console.log('🚀 NFC Mode - Začínam processNFC');
                 await processNFC();
             }
             
+            // Uložiť referenciu na funkciu do window pre debug
+            window.debugGymApp = {
+                loadFromIndexedDB: loadFromIndexedDB,
+                initDB: initDB,
+                getCookie: getCookie,
+                testStorage: async function() {
+                    console.log('=== TEST ÚLOŽISK ===');
+                    console.log('IndexedDB podporovaný:', !!window.indexedDB);
+                    console.log('localStorage dostupný:', typeof(Storage) !== "undefined");
+                    console.log('Cookies:', document.cookie);
+                    
+                    try {
+                        const data = await loadFromIndexedDB();
+                        console.log('IndexedDB dáta:', data);
+                    } catch (e) {
+                        console.error('IndexedDB chyba:', e);
+                    }
+                    
+                    try {
+                        const localName = localStorage.getItem('gym_name');
+                        const localMembership = localStorage.getItem('gym_membership');
+                        console.log('localStorage dáta:', { name: localName, membership: localMembership });
+                    } catch (e) {
+                        console.error('localStorage chyba:', e);
+                    }
+                    
+                    const cookieName = getCookie('gym_name');
+                    const cookieMembership = getCookie('gym_membership');
+                    console.log('Cookies dáta:', { name: cookieName, membership: cookieMembership });
+                }
+            };
+            
             if (document.readyState === 'loading') {
                 document.addEventListener('DOMContentLoaded', () => {
+                    console.log('📱 DOMContentLoaded - spúšťam NFC');
                     initNFC().catch(e => {
-                        console.error('Chyba pri inicializácii NFC:', e);
+                        console.error('❌ Chyba pri inicializácii NFC:', e);
+                        alert('Chyba pri načítaní údajov: ' + e.message);
                     });
                 });
             } else {
+                console.log('📱 DOM už načítaný - spúšťam NFC');
                 initNFC().catch(e => {
-                    console.error('Chyba pri inicializácii NFC:', e);
+                    console.error('❌ Chyba pri inicializácii NFC:', e);
+                    alert('Chyba pri načítaní údajov: ' + e.message);
                 });
             }
             
@@ -510,6 +548,9 @@ def participant_view(worksheet, query_params=None):
                         console.log('NFC Mode - Debug: IndexedDB podporovaný:', !!window.indexedDB);
                         console.log('NFC Mode - Debug: Cookies:', document.cookie);
                         console.log('NFC Mode - Debug: localStorage dostupný:', typeof(Storage) !== "undefined");
+                        
+                        // Zobraziť alert s inštrukciami
+                        alert('⚠️ Údaje nie sú uložené!\n\nProsím:\n1. Choď na https://giantgym.streamlit.app/?view=participant\n2. Klikni na "💾 Uložiť údaje pre NFC"\n3. Vyplň údaje a ulož ich\n4. Potom skús znova naskenovať QR kód\n\nPre debug: Otvor konzolu a spusti window.debugGymApp.testStorage()');
                         return;
                     }
                     
