@@ -17,6 +17,7 @@ import zipfile
 import io
 import base64
 import hashlib
+import pytz
 
 # Konfigurácia stránky
 st.set_page_config(
@@ -67,6 +68,18 @@ TRAINING_TIMES = [
 # Heslo pre trénerskú časť
 TRAINER_PASSWORD = "supernova"
 
+# Časové pásmo pre Slovensko
+TIMEZONE = pytz.timezone('Europe/Bratislava')
+
+
+def get_local_time():
+    """
+    Vráti aktuálny čas v časovom pásme Europe/Bratislava (Slovensko).
+    """
+    utc_now = datetime.now(pytz.UTC)
+    local_time = utc_now.astimezone(TIMEZONE)
+    return local_time
+
 
 def get_google_sheets_client():
     """Pripojenie k Google Sheets pomocou service account."""
@@ -95,7 +108,9 @@ def get_or_create_sheet(client, spreadsheet_id):
     """Získanie alebo vytvorenie hárku pre dnešný deň."""
     try:
         spreadsheet = client.open_by_key(spreadsheet_id)
-        today_str = date.today().strftime("%Y-%m-%d")
+        # Použiť lokálny dátum (Europe/Bratislava)
+        today = get_local_time().date()
+        today_str = today.strftime("%Y-%m-%d")
         
         # Skúsime nájsť hárok pre dnešný deň
         try:
@@ -123,11 +138,12 @@ def get_or_create_sheet(client, spreadsheet_id):
 def add_attendance(worksheet, name, membership_type, training_time="", client_timestamp=None):
     """Pridanie záznamu o účasti."""
     try:
-        # Použiť čas klienta ak je k dispozícii, inak serverový čas (fallback)
+        # Použiť čas klienta ak je k dispozícii, inak lokálny serverový čas (Europe/Bratislava)
         if client_timestamp:
             timestamp = client_timestamp
         else:
-            timestamp = datetime.now().strftime("%H:%M:%S")
+            local_time = get_local_time()
+            timestamp = local_time.strftime("%H:%M:%S")
         row = [timestamp, name, membership_type, training_time, ""]
         worksheet.append_row(row)
         return True
@@ -269,7 +285,8 @@ def get_next_training_time():
     Returns:
         str: Čas tréningu (napr. "9:00", "17:00", "18:30")
     """
-    now = datetime.now()
+    # Použiť lokálny čas (Europe/Bratislava)
+    now = get_local_time()
     current_hour = now.hour
     current_minute = now.minute
     current_time_minutes = current_hour * 60 + current_minute
@@ -923,7 +940,7 @@ def generate_wallet_pass(name, membership, time, auto=True):
     pass_data = {
         "formatVersion": 1,
         "passTypeIdentifier": "pass.com.giantgym.attendance",
-        "serialNumber": f"{name.replace(' ', '_')}_{int(datetime.now().timestamp())}",
+        "serialNumber": f"{name.replace(' ', '_')}_{int(get_local_time().timestamp())}",
         "teamIdentifier": "GIANTGYM",
         "organizationName": "Giant Gym",
         "description": "Gym Attendance Pass",
@@ -956,7 +973,7 @@ def generate_wallet_pass(name, membership, time, auto=True):
                 {
                     "key": "date",
                     "label": "Vytvorené",
-                    "value": datetime.now().strftime("%d.%m.%Y")
+                    "value": get_local_time().strftime("%d.%m.%Y")
                 }
             ],
             "barcode": {
@@ -1684,7 +1701,9 @@ def main():
             st.rerun()
         
         st.markdown("---")
-        st.markdown(f"📅 **{date.today().strftime('%d.%m.%Y')}**")
+        # Zobrazenie lokálneho dátumu
+        today = get_local_time().date()
+        st.markdown(f"📅 **{today.strftime('%d.%m.%Y')}**")
         
         # QR kód info
         st.markdown("---")
