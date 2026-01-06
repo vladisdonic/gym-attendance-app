@@ -423,28 +423,45 @@ def participant_view(worksheet, query_params=None):
             }
             
             // Počkáme, kým sa DOM načíta (pre iPhone kompatibilitu)
+            async function initNFC() {
+                // Malé oneskorenie pre istotu, aby sa IndexedDB správne inicializoval
+                await new Promise(resolve => setTimeout(resolve, 100));
+                await processNFC();
+            }
+            
             if (document.readyState === 'loading') {
-                document.addEventListener('DOMContentLoaded', processNFC);
+                document.addEventListener('DOMContentLoaded', () => {
+                    initNFC().catch(e => {
+                        console.error('Chyba pri inicializácii NFC:', e);
+                    });
+                });
             } else {
-                processNFC();
+                initNFC().catch(e => {
+                    console.error('Chyba pri inicializácii NFC:', e);
+                });
             }
             
             async function processNFC() {
                 try {
+                    console.log('NFC Mode - Začínam načítavanie údajov...');
                     let userData = null;
                     
                     // PRIMÁRNE: IndexedDB (najlepšie pre iPhone/Safari)
                     try {
+                        console.log('NFC Mode - Pokúšam sa načítať z IndexedDB...');
                         userData = await loadFromIndexedDB();
                         if (userData && userData.name && userData.membership) {
-                            console.log('NFC Mode - Načítané z IndexedDB:', userData);
+                            console.log('NFC Mode - ✅ Načítané z IndexedDB:', userData);
+                        } else {
+                            console.log('NFC Mode - IndexedDB je prázdny alebo neúplný');
                         }
                     } catch (e) {
-                        console.log('Chyba pri načítaní z IndexedDB:', e);
+                        console.error('NFC Mode - ❌ Chyba pri načítaní z IndexedDB:', e);
                     }
                     
                     // ZÁLOŽNÉ 1: Cookies (ak IndexedDB nefunguje)
                     if (!userData || !userData.name || !userData.membership) {
+                        console.log('NFC Mode - Pokúšam sa načítať z cookies...');
                         const cookieName = getCookie('gym_name');
                         const cookieMembership = getCookie('gym_membership');
                         if (cookieName && cookieMembership) {
@@ -452,13 +469,16 @@ def participant_view(worksheet, query_params=None):
                                 name: cookieName,
                                 membership: cookieMembership
                             };
-                            console.log('NFC Mode - Načítané z cookies:', userData);
+                            console.log('NFC Mode - ✅ Načítané z cookies:', userData);
+                        } else {
+                            console.log('NFC Mode - Cookies nie sú dostupné');
                         }
                     }
                     
                     // ZÁLOŽNÉ 2: localStorage (posledná možnosť)
                     if (!userData || !userData.name || !userData.membership) {
                         try {
+                            console.log('NFC Mode - Pokúšam sa načítať z localStorage...');
                             const localName = localStorage.getItem('gym_name');
                             const localMembership = localStorage.getItem('gym_membership');
                             if (localName && localMembership) {
@@ -466,27 +486,34 @@ def participant_view(worksheet, query_params=None):
                                     name: localName,
                                     membership: localMembership
                                 };
-                                console.log('NFC Mode - Načítané z localStorage:', userData);
+                                console.log('NFC Mode - ✅ Načítané z localStorage:', userData);
                                 // Migrácia do IndexedDB a cookies
                                 try {
+                                    console.log('NFC Mode - Migrujem údaje do IndexedDB a cookies...');
                                     await saveToIndexedDB(localName, localMembership);
-                                    setCookie('gym_name', localName);
-                                    setCookie('gym_membership', localMembership);
+                                setCookie('gym_name', localName);
+                                setCookie('gym_membership', localMembership);
+                                    console.log('NFC Mode - ✅ Migrácia úspešná');
                                 } catch (e) {
-                                    console.log('Chyba pri migrácii:', e);
+                                    console.error('NFC Mode - ❌ Chyba pri migrácii:', e);
                                 }
+                            } else {
+                                console.log('NFC Mode - localStorage je prázdny');
                             }
                         } catch (e) {
-                            console.log('localStorage nie je dostupné:', e);
+                            console.error('NFC Mode - ❌ localStorage nie je dostupné:', e);
                         }
                     }
                     
                     if (!userData || !userData.name || !userData.membership) {
-                        console.log('NFC Mode - Údaje neboli nájdené v žiadnom úložisku');
+                        console.error('NFC Mode - ❌ Údaje neboli nájdené v žiadnom úložisku');
+                        console.log('NFC Mode - Debug: IndexedDB podporovaný:', !!window.indexedDB);
+                        console.log('NFC Mode - Debug: Cookies:', document.cookie);
+                        console.log('NFC Mode - Debug: localStorage dostupný:', typeof(Storage) !== "undefined");
                         return;
                     }
                     
-                    console.log('NFC Mode - Finálne načítané údaje:', userData);
+                    console.log('NFC Mode - ✅ Finálne načítané údaje:', userData);
                     
                     // Automatický výber času tréningu podľa aktuálneho času
                     const now = new Date();
@@ -886,6 +913,34 @@ def participant_view(worksheet, query_params=None):
                 }});
             }}
             
+            // Funkcia na načítanie údajov z IndexedDB
+            async function loadFromIndexedDB() {{
+                try {{
+                    if (!window.indexedDB) {{
+                        return null;
+                    }}
+                    const db = await initDB();
+                    return new Promise((resolve, reject) => {{
+                        const transaction = db.transaction([STORE_NAME], 'readonly');
+                        const store = transaction.objectStore(STORE_NAME);
+                        const request = store.get(1);
+                        
+                        request.onsuccess = () => {{
+                            const data = request.result;
+                            if (data && data.name && data.membership) {{
+                                resolve({{ name: data.name, membership: data.membership }});
+                            }} else {{
+                                resolve(null);
+                            }}
+                        }};
+                        request.onerror = () => reject(request.error);
+                    }});
+                }} catch (e) {{
+                    console.log('IndexedDB nie je dostupné:', e);
+                    return null;
+                }}
+            }}
+            
             // Funkcia na uloženie údajov do IndexedDB
             async function saveToIndexedDB(name, membership) {{
                 try {{
@@ -925,18 +980,25 @@ def participant_view(worksheet, query_params=None):
                     
                     // PRIMÁRNE: Uloženie do IndexedDB (najlepšie pre iPhone/Safari)
                     try {{
+                        console.log('Ukladanie do IndexedDB:', name, membership);
                         await saveToIndexedDB(name, membership);
-                        savedSuccessfully = true;
-                        storageType = 'IndexedDB';
-                        console.log('Údaje uložené do IndexedDB');
+                        // Overenie, že sa údaje skutočne uložili
+                        const verifyData = await loadFromIndexedDB();
+                        if (verifyData && verifyData.name === name && verifyData.membership === membership) {{
+                            savedSuccessfully = true;
+                            storageType = 'IndexedDB';
+                            console.log('✅ Údaje úspešne uložené a overené v IndexedDB');
+                        }} else {{
+                            console.warn('⚠️ Údaje sa neuložili správne do IndexedDB');
+                        }}
                     }} catch (e) {{
-                        console.log('Chyba pri ukladaní do IndexedDB:', e);
+                        console.error('❌ Chyba pri ukladaní do IndexedDB:', e);
                     }}
                     
                     // ZÁLOŽNÉ 1: Uloženie do cookies
                     try {{
-                        setCookie('gym_name', name);
-                        setCookie('gym_membership', membership);
+                    setCookie('gym_name', name);
+                    setCookie('gym_membership', membership);
                         if (!savedSuccessfully) {{
                             savedSuccessfully = true;
                             storageType = 'cookies';
