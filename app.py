@@ -332,17 +332,86 @@ def participant_view(worksheet, query_params=None):
     # Detekcia NFC módu (nový spôsob)
     nfc_mode = query_params.get("nfc", "0") == "1"
     
-    # Ak je NFC mód, načítame údaje z cookies/localStorage a automaticky vyberieme čas
+    # Ak je NFC mód, načítame údaje z IndexedDB/cookies/localStorage a automaticky vyberieme čas
     if nfc_mode:
         st.markdown("""
         <script>
         (function() {
+            const DB_NAME = 'GiantGymDB';
+            const DB_VERSION = 1;
+            const STORE_NAME = 'userData';
+            
+            // Funkcia na inicializáciu IndexedDB
+            function initDB() {
+                return new Promise((resolve, reject) => {
+                    if (!window.indexedDB) {
+                        reject(new Error('IndexedDB nie je podporovaný'));
+                        return;
+                    }
+                    
+                    const request = indexedDB.open(DB_NAME, DB_VERSION);
+                    
+                    request.onerror = () => reject(request.error);
+                    request.onsuccess = () => resolve(request.result);
+                    
+                    request.onupgradeneeded = (event) => {
+                        const db = event.target.result;
+                        if (!db.objectStoreNames.contains(STORE_NAME)) {
+                            db.createObjectStore(STORE_NAME, { keyPath: 'id' });
+                        }
+                    };
+                });
+            }
+            
+            // Funkcia na načítanie údajov z IndexedDB
+            async function loadFromIndexedDB() {
+                try {
+                    const db = await initDB();
+                    return new Promise((resolve, reject) => {
+                        const transaction = db.transaction([STORE_NAME], 'readonly');
+                        const store = transaction.objectStore(STORE_NAME);
+                        const request = store.get(1);
+                        
+                        request.onsuccess = () => {
+                            const data = request.result;
+                            if (data && data.name && data.membership) {
+                                resolve({ name: data.name, membership: data.membership });
+                            } else {
+                                resolve(null);
+                            }
+                        };
+                        request.onerror = () => reject(request.error);
+                    });
+                } catch (e) {
+                    console.log('IndexedDB nie je dostupné:', e);
+                    return null;
+                }
+            }
+            
             // Funkcia na načítanie cookie
             function getCookie(name) {
                 const value = `; ${document.cookie}`;
                 const parts = value.split(`; ${name}=`);
                 if (parts.length === 2) return decodeURIComponent(parts.pop().split(';').shift());
                 return '';
+            }
+            
+            // Funkcia na uloženie údajov do IndexedDB
+            async function saveToIndexedDB(name, membership) {
+                try {
+                    const db = await initDB();
+                    return new Promise((resolve, reject) => {
+                        const transaction = db.transaction([STORE_NAME], 'readwrite');
+                        const store = transaction.objectStore(STORE_NAME);
+                        const request = store.put({ id: 1, name: name, membership: membership });
+                        
+                        request.onsuccess = () => resolve();
+                        request.onerror = () => reject(request.error);
+                    });
+                } catch (e) {
+                    console.log('Chyba pri ukladaní do IndexedDB:', e);
+                    throw e;
+                }
             }
             
             // Funkcia na uloženie cookie
@@ -360,16 +429,35 @@ def participant_view(worksheet, query_params=None):
                 processNFC();
             }
             
-            function processNFC() {
+            async function processNFC() {
                 try {
-                    // Načítanie údajov - PRIMÁRNE: cookies (funguje lepšie na iPhone/Safari)
-                    let userData = {
-                        name: getCookie('gym_name') || '',
-                        membership: getCookie('gym_membership') || ''
-                    };
+                    let userData = null;
                     
-                    // ZÁLOŽNÉ: localStorage (ak cookies nefungujú)
-                    if (!userData.name || !userData.membership) {
+                    // PRIMÁRNE: IndexedDB (najlepšie pre iPhone/Safari)
+                    try {
+                        userData = await loadFromIndexedDB();
+                        if (userData && userData.name && userData.membership) {
+                            console.log('NFC Mode - Načítané z IndexedDB:', userData);
+                        }
+                    } catch (e) {
+                        console.log('Chyba pri načítaní z IndexedDB:', e);
+                    }
+                    
+                    // ZÁLOŽNÉ 1: Cookies (ak IndexedDB nefunguje)
+                    if (!userData || !userData.name || !userData.membership) {
+                        const cookieName = getCookie('gym_name');
+                        const cookieMembership = getCookie('gym_membership');
+                        if (cookieName && cookieMembership) {
+                            userData = {
+                                name: cookieName,
+                                membership: cookieMembership
+                            };
+                            console.log('NFC Mode - Načítané z cookies:', userData);
+                        }
+                    }
+                    
+                    // ZÁLOŽNÉ 2: localStorage (posledná možnosť)
+                    if (!userData || !userData.name || !userData.membership) {
                         try {
                             const localName = localStorage.getItem('gym_name');
                             const localMembership = localStorage.getItem('gym_membership');
@@ -378,16 +466,27 @@ def participant_view(worksheet, query_params=None):
                                     name: localName,
                                     membership: localMembership
                                 };
-                                // Ak sa údaje našli v localStorage, ulož ich aj do cookies (migrácia)
-                                setCookie('gym_name', localName);
-                                setCookie('gym_membership', localMembership);
+                                console.log('NFC Mode - Načítané z localStorage:', userData);
+                                // Migrácia do IndexedDB a cookies
+                                try {
+                                    await saveToIndexedDB(localName, localMembership);
+                                    setCookie('gym_name', localName);
+                                    setCookie('gym_membership', localMembership);
+                                } catch (e) {
+                                    console.log('Chyba pri migrácii:', e);
+                                }
                             }
                         } catch (e) {
                             console.log('localStorage nie je dostupné:', e);
                         }
                     }
                     
-                    console.log('NFC Mode - Načítané údaje:', userData);
+                    if (!userData || !userData.name || !userData.membership) {
+                        console.log('NFC Mode - Údaje neboli nájdené v žiadnom úložisku');
+                        return;
+                    }
+                    
+                    console.log('NFC Mode - Finálne načítané údaje:', userData);
                     
                     // Automatický výber času tréningu podľa aktuálneho času
                     const now = new Date();
@@ -546,11 +645,62 @@ def participant_view(worksheet, query_params=None):
         - Automaticky ťa prihlási
         """)
         
-        # Debug sekcia - zobrazenie aktuálnych údajov (cookies primárne, localStorage záložné)
+        # Debug sekcia - zobrazenie aktuálnych údajov (IndexedDB primárne, cookies a localStorage záložné)
         st.markdown("### 🔍 Kontrola uložených údajov")
         st.markdown("""
         <script>
-        (function() {
+        (async function() {
+            const DB_NAME = 'GiantGymDB';
+            const DB_VERSION = 1;
+            const STORE_NAME = 'userData';
+            
+            // Funkcia na inicializáciu IndexedDB
+            function initDB() {
+                return new Promise((resolve, reject) => {
+                    if (!window.indexedDB) {
+                        reject(new Error('IndexedDB nie je podporovaný'));
+                        return;
+                    }
+                    
+                    const request = indexedDB.open(DB_NAME, DB_VERSION);
+                    
+                    request.onerror = () => reject(request.error);
+                    request.onsuccess = () => resolve(request.result);
+                    
+                    request.onupgradeneeded = (event) => {
+                        const db = event.target.result;
+                        if (!db.objectStoreNames.contains(STORE_NAME)) {
+                            db.createObjectStore(STORE_NAME, { keyPath: 'id' });
+                        }
+                    };
+                });
+            }
+            
+            // Funkcia na načítanie údajov z IndexedDB
+            async function loadFromIndexedDB() {
+                try {
+                    const db = await initDB();
+                    return new Promise((resolve, reject) => {
+                        const transaction = db.transaction([STORE_NAME], 'readonly');
+                        const store = transaction.objectStore(STORE_NAME);
+                        const request = store.get(1);
+                        
+                        request.onsuccess = () => {
+                            const data = request.result;
+                            if (data && data.name && data.membership) {
+                                resolve({ name: data.name, membership: data.membership });
+                            } else {
+                                resolve(null);
+                            }
+                        };
+                        request.onerror = () => reject(request.error);
+                    });
+                } catch (e) {
+                    console.log('IndexedDB nie je dostupné:', e);
+                    return null;
+                }
+            }
+            
             // Funkcia na načítanie cookie
             function getCookie(name) {
                 const value = `; ${document.cookie}`;
@@ -559,12 +709,34 @@ def participant_view(worksheet, query_params=None):
                 return '';
             }
             
-            // PRIMÁRNE: Skúsime cookies (funguje lepšie na iPhone)
-            let savedName = getCookie('gym_name') || '';
-            let savedMembership = getCookie('gym_membership') || '';
-            let storageType = 'cookies';
+            let savedName = '';
+            let savedMembership = '';
+            let storageType = '';
             
-            // ZÁLOŽNÉ: localStorage (ak cookies nefungujú)
+            // PRIMÁRNE: IndexedDB (najlepšie pre iPhone/Safari)
+            try {
+                const indexedData = await loadFromIndexedDB();
+                if (indexedData && indexedData.name && indexedData.membership) {
+                    savedName = indexedData.name;
+                    savedMembership = indexedData.membership;
+                    storageType = 'IndexedDB';
+                }
+            } catch (e) {
+                console.log('Chyba pri načítaní z IndexedDB:', e);
+            }
+            
+            // ZÁLOŽNÉ 1: Cookies (ak IndexedDB nefunguje)
+            if (!savedName || !savedMembership) {
+                const cookieName = getCookie('gym_name');
+                const cookieMembership = getCookie('gym_membership');
+                if (cookieName && cookieMembership) {
+                    savedName = cookieName;
+                    savedMembership = cookieMembership;
+                    storageType = 'cookies';
+                }
+            }
+            
+            // ZÁLOŽNÉ 2: localStorage (posledná možnosť)
             if (!savedName || !savedMembership) {
                 try {
                     const localName = localStorage.getItem('gym_name');
@@ -594,7 +766,7 @@ def participant_view(worksheet, query_params=None):
         </script>
         """, unsafe_allow_html=True)
         
-        st.markdown("**📱 Odporúčané riešenie pre iPhone:** Použi tlačidlo 'Generovať QR kód' - vytvorí sa ti unikátny QR kód, ktorý funguje na všetkých telefónoch bez potreby cookies/localStorage.")
+        st.markdown("**📱 Odporúčané riešenie pre iPhone:** Použi tlačidlo 'Generovať QR kód' - vytvorí sa ti unikátny QR kód, ktorý funguje na všetkých telefónoch bez potreby úložiska. Alebo použij 'Uložiť údaje pre NFC tag' - údaje sa uložia do IndexedDB (funguje aj na iPhone).")
         st.markdown("---")
         
         save_name = st.text_input("Meno a priezvisko *", key="save_name", placeholder="Zadaj svoje meno...")
@@ -664,14 +836,15 @@ def participant_view(worksheet, query_params=None):
             
             st.info("💡 **Ako používať:** Ulož si tento QR kód do galérie alebo vytlač. Pri príchode do gymu ho naskenuj fotoaparátom a automaticky sa prihlásiš na tréning!")
         
-        # Sekundárne riešenie - ukladanie do cookies/localStorage (pre NFC tag v gyme)
+        # Sekundárne riešenie - ukladanie do IndexedDB/cookies/localStorage (pre NFC tag v gyme)
         st.markdown("---")
         st.markdown("### 🔧 Alternatívne riešenie (pre NFC tag v gyme)")
         st.markdown("**Ak máš v gyme NFC tag s URL `?nfc=1`, môžeš si uložiť údaje do telefónu:**")
+        st.markdown("**✅ Údaje sa uložia do IndexedDB (funguje aj na iPhone v Safari), cookies a localStorage ako záložné riešenia.**")
         
         if st.button("💾 Uložiť údaje pre NFC tag", key="save_data", use_container_width=True):
             if save_name.strip():
-                # Použijeme session state na uloženie údajov, ktoré sa potom uložia do cookies/localStorage cez JavaScript
+                # Použijeme session state na uloženie údajov, ktoré sa potom uložia do IndexedDB/cookies/localStorage cez JavaScript
                 st.session_state['save_to_localstorage'] = {
                     'name': save_name.strip(),
                     'membership': save_membership
@@ -681,13 +854,57 @@ def participant_view(worksheet, query_params=None):
             else:
                 st.warning("⚠️ Prosím, zadaj meno.")
     
-    # JavaScript na uloženie údajov do cookies a localStorage (spustí sa po rerun)
+    # JavaScript na uloženie údajov do IndexedDB, cookies a localStorage (spustí sa po rerun)
     if 'save_to_localstorage' in st.session_state:
         save_data = st.session_state['save_to_localstorage']
         st.markdown(f"""
         <script>
-        (function() {{
-            // Funkcia na uloženie cookie (primárne úložisko pre iPhone)
+        (async function() {{
+            const DB_NAME = 'GiantGymDB';
+            const DB_VERSION = 1;
+            const STORE_NAME = 'userData';
+            
+            // Funkcia na inicializáciu IndexedDB
+            function initDB() {{
+                return new Promise((resolve, reject) => {{
+                    if (!window.indexedDB) {{
+                        reject(new Error('IndexedDB nie je podporovaný'));
+                        return;
+                    }}
+                    
+                    const request = indexedDB.open(DB_NAME, DB_VERSION);
+                    
+                    request.onerror = () => reject(request.error);
+                    request.onsuccess = () => resolve(request.result);
+                    
+                    request.onupgradeneeded = (event) => {{
+                        const db = event.target.result;
+                        if (!db.objectStoreNames.contains(STORE_NAME)) {{
+                            db.createObjectStore(STORE_NAME, {{ keyPath: 'id' }});
+                        }}
+                    }};
+                }});
+            }}
+            
+            // Funkcia na uloženie údajov do IndexedDB
+            async function saveToIndexedDB(name, membership) {{
+                try {{
+                    const db = await initDB();
+                    return new Promise((resolve, reject) => {{
+                        const transaction = db.transaction([STORE_NAME], 'readwrite');
+                        const store = transaction.objectStore(STORE_NAME);
+                        const request = store.put({{ id: 1, name: name, membership: membership }});
+                        
+                        request.onsuccess = () => resolve();
+                        request.onerror = () => reject(request.error);
+                    }});
+                }} catch (e) {{
+                    console.log('Chyba pri ukladaní do IndexedDB:', e);
+                    throw e;
+                }}
+            }}
+            
+            // Funkcia na uloženie cookie
             function setCookie(name, value, days = 365) {{
                 const encodedValue = encodeURIComponent(value);
                 const expires = new Date();
@@ -698,31 +915,53 @@ def participant_view(worksheet, query_params=None):
             }}
             
             // Počkáme, kým sa DOM načíta (pre iPhone kompatibilitu)
-            function saveUserData() {{
+            async function saveUserData() {{
                 try {{
                     const name = {json.dumps(save_data['name'])};
                     const membership = {json.dumps(save_data['membership'])};
                     
-                    // Uloženie do cookies (lepšie pre Safari/iPhone)
-                    setCookie('gym_name', name);
-                    setCookie('gym_membership', membership);
+                    let savedSuccessfully = false;
+                    let storageType = '';
                     
-                    // Uloženie do localStorage (záložné riešenie)
+                    // PRIMÁRNE: Uloženie do IndexedDB (najlepšie pre iPhone/Safari)
+                    try {{
+                        await saveToIndexedDB(name, membership);
+                        savedSuccessfully = true;
+                        storageType = 'IndexedDB';
+                        console.log('Údaje uložené do IndexedDB');
+                    }} catch (e) {{
+                        console.log('Chyba pri ukladaní do IndexedDB:', e);
+                    }}
+                    
+                    // ZÁLOŽNÉ 1: Uloženie do cookies
+                    try {{
+                        setCookie('gym_name', name);
+                        setCookie('gym_membership', membership);
+                        if (!savedSuccessfully) {{
+                            savedSuccessfully = true;
+                            storageType = 'cookies';
+                        }}
+                        console.log('Údaje uložené do cookies');
+                    }} catch (e) {{
+                        console.log('Chyba pri ukladaní do cookies:', e);
+                    }}
+                    
+                    // ZÁLOŽNÉ 2: Uloženie do localStorage
                     try {{
                         localStorage.setItem('gym_name', name);
                         localStorage.setItem('gym_membership', membership);
+                        if (!savedSuccessfully) {{
+                            savedSuccessfully = true;
+                            storageType = 'localStorage';
+                        }}
+                        console.log('Údaje uložené do localStorage');
                     }} catch (e) {{
-                        console.log('localStorage nie je dostupné, používame len cookies:', e);
+                        console.log('localStorage nie je dostupné:', e);
                     }}
                     
                     // Overenie, že sa údaje uložili
-                    const savedName = document.cookie.match(/gym_name=([^;]+)/) ? 
-                        decodeURIComponent(document.cookie.match(/gym_name=([^;]+)/)[1]) : '';
-                    const savedMembership = document.cookie.match(/gym_membership=([^;]+)/) ? 
-                        decodeURIComponent(document.cookie.match(/gym_membership=([^;]+)/)[1]) : '';
-                    
-                    if (savedName && savedMembership) {{
-                        alert('✅ Údaje úspešne uložené!\\n\\nMeno: ' + savedName + '\\nTyp členstva: ' + savedMembership + '\\n\\nTeraz môžeš naskenovať NFC čip alebo QR kód v gyme.');
+                    if (savedSuccessfully) {{
+                        alert('✅ Údaje úspešne uložené (' + storageType + ')!\\n\\nMeno: ' + name + '\\nTyp členstva: ' + membership + '\\n\\nTeraz môžeš naskenovať NFC čip alebo QR kód v gyme.');
                     }} else {{
                         alert('⚠️ Chyba pri ukladaní údajov. Skús to znova.');
                     }}
@@ -1720,7 +1959,7 @@ def main():
         `https://giantgym.streamlit.app/?view=participant&nfc=1`
         
         Po naskenovaní automaticky:
-        - Načíta údaje z telefónu (localStorage)
+        - Načíta údaje z telefónu (IndexedDB/cookies/localStorage)
         - Vyberie najbližší tréning podľa aktuálneho času
         - Automaticky prihlási
         
