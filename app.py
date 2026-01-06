@@ -624,22 +624,43 @@ def participant_view(worksheet, query_params=None):
             display: none !important;
             visibility: hidden !important;
         }
-        
-        /* Skryť všetky elementy obsahujúce JavaScript kód */
-        p:has-text('})();'),
-        p:contains('})();'),
-        *:has-text('})();'),
-        *:contains('})();') {
-            display: none !important;
-            visibility: hidden !important;
-            height: 0 !important;
-            width: 0 !important;
-            overflow: hidden !important;
-            opacity: 0 !important;
-            position: absolute !important;
-            left: -9999px !important;
-        }
         </style>
+        <script>
+        // Skryť zobrazený JavaScript kód pomocou JavaScript (CSS selektory :has-text a :contains neexistujú)
+        (function() {
+            function hideJavaScriptCode() {
+                const allElements = document.querySelectorAll('p, div, span, pre, code');
+                allElements.forEach(function(el) {
+                    const text = el.textContent || el.innerText || '';
+                    // Skryť ak obsahuje JavaScript syntax
+                    if (text.includes('})();') || 
+                        text.includes('(function()') ||
+                        (text.includes('})') && text.includes('();')) ||
+                        (text.includes('async function') && text.includes('processNFC'))) {
+                        el.style.display = 'none';
+                        el.style.visibility = 'hidden';
+                        el.style.height = '0';
+                        el.style.width = '0';
+                        el.style.overflow = 'hidden';
+                        el.style.opacity = '0';
+                        el.style.position = 'absolute';
+                        el.style.left = '-9999px';
+                    }
+                });
+            }
+            
+            // Spustiť po načítaní
+            if (document.readyState === 'loading') {
+                document.addEventListener('DOMContentLoaded', hideJavaScriptCode);
+            } else {
+                hideJavaScriptCode();
+            }
+            
+            // Spustiť aj po malom oneskorení
+            setTimeout(hideJavaScriptCode, 100);
+            setTimeout(hideJavaScriptCode, 500);
+        })();
+        </script>
         """, unsafe_allow_html=True)
         
         # Zobrazíme informáciu - ak JavaScript presmeroval, táto časť sa nezobrazí
@@ -1839,33 +1860,6 @@ def main():
     script {
         display: none !important;
         visibility: hidden !important;
-    }
-    
-    /* Skryť všetky elementy obsahujúce JavaScript kód */
-    p:has-text('})();'),
-    p:contains('})();'),
-    *:has-text('})();'),
-    *:contains('})();') {
-        display: none !important;
-        visibility: hidden !important;
-        height: 0 !important;
-        width: 0 !important;
-        overflow: hidden !important;
-        opacity: 0 !important;
-        position: absolute !important;
-        left: -9999px !important;
-    }
-    
-    /* Univerzálne skrytie pre všetky elementy obsahujúce JavaScript syntax */
-    p[class*="stMarkdown"]:has-text('})();'),
-    div:has-text('})();'),
-    span:has-text('})();') {
-        display: none !important;
-        visibility: hidden !important;
-        height: 0 !important;
-        width: 0 !important;
-        overflow: hidden !important;
-        opacity: 0 !important;
     }
     </style>
     <script>
