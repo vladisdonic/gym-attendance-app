@@ -436,6 +436,21 @@ def participant_view(worksheet, query_params=None):
             display: none !important;
             visibility: hidden !important;
         }
+        
+        /* Skryť všetky elementy obsahujúce JavaScript kód */
+        p:has-text('})();'),
+        p:contains('})();'),
+        *:has-text('})();'),
+        *:contains('})();') {
+            display: none !important;
+            visibility: hidden !important;
+            height: 0 !important;
+            width: 0 !important;
+            overflow: hidden !important;
+            opacity: 0 !important;
+            position: absolute !important;
+            left: -9999px !important;
+        }
         </style>
         """, unsafe_allow_html=True)
         
@@ -1407,20 +1422,76 @@ def main():
         display: none !important;
         visibility: hidden !important;
     }
+    
+    /* Skryť všetky elementy obsahujúce JavaScript kód */
+    p:has-text('})();'),
+    p:contains('})();'),
+    *:has-text('})();'),
+    *:contains('})();') {
+        display: none !important;
+        visibility: hidden !important;
+        height: 0 !important;
+        width: 0 !important;
+        overflow: hidden !important;
+        opacity: 0 !important;
+        position: absolute !important;
+        left: -9999px !important;
+    }
+    
+    /* Univerzálne skrytie pre všetky elementy obsahujúce JavaScript syntax */
+    p[class*="stMarkdown"]:has-text('})();'),
+    div:has-text('})();'),
+    span:has-text('})();') {
+        display: none !important;
+        visibility: hidden !important;
+        height: 0 !important;
+        width: 0 !important;
+        overflow: hidden !important;
+        opacity: 0 !important;
+    }
     </style>
     <script>
     (function() {
         // Skryť akékoľvek zobrazené JavaScript kódy po načítaní stránky
         function hideJavaScriptCode() {
+            // Skryť všetky elementy obsahujúce JavaScript kód
             const allElements = document.querySelectorAll('*');
             allElements.forEach(function(el) {
+                // Preskočiť script tagy (tie už sú skryté cez CSS)
+                if (el.tagName === 'SCRIPT') return;
+                
                 const text = el.textContent || el.innerText || '';
-                if (text.includes('})();') && !el.closest('script')) {
+                // Skryť ak obsahuje JavaScript syntax
+                if (text.includes('})();') || 
+                    text.includes('(function()') ||
+                    text.includes('function()') ||
+                    (text.includes('})') && text.includes('();'))) {
                     el.style.display = 'none';
                     el.style.visibility = 'hidden';
                     el.style.height = '0';
                     el.style.width = '0';
                     el.style.overflow = 'hidden';
+                    el.style.opacity = '0';
+                    el.style.position = 'absolute';
+                    el.style.left = '-9999px';
+                }
+            });
+            
+            // Špecificky skryť všetky <p> tagy obsahujúce JavaScript
+            const paragraphs = document.querySelectorAll('p');
+            paragraphs.forEach(function(p) {
+                const text = p.textContent || p.innerText || '';
+                if (text.includes('})();') || 
+                    text.includes('(function()') ||
+                    (text.includes('})') && text.includes('();'))) {
+                    p.style.display = 'none';
+                    p.style.visibility = 'hidden';
+                    p.style.height = '0';
+                    p.style.width = '0';
+                    p.style.overflow = 'hidden';
+                    p.style.opacity = '0';
+                    p.style.position = 'absolute';
+                    p.style.left = '-9999px';
                 }
             });
         }
@@ -1434,6 +1505,23 @@ def main():
         
         // Spustiť aj po úplnom načítaní stránky
         window.addEventListener('load', hideJavaScriptCode);
+        
+        // Spustiť aj po malom oneskorení (pre Streamlit renderovanie)
+        setTimeout(hideJavaScriptCode, 100);
+        setTimeout(hideJavaScriptCode, 500);
+        setTimeout(hideJavaScriptCode, 1000);
+        
+        // MutationObserver na sledovanie zmien v DOM (pre Streamlit dynamické renderovanie)
+        const observer = new MutationObserver(function(mutations) {
+            hideJavaScriptCode();
+        });
+        
+        // Začať pozorovanie zmien v DOM
+        observer.observe(document.body, {
+            childList: true,
+            subtree: true,
+            characterData: true
+        });
     })();
     </script>
     """, unsafe_allow_html=True)
