@@ -6,7 +6,6 @@ Aplikácia na evidenciu účasti na tréningoch
 """
 
 import streamlit as st
-import streamlit.components.v1 as components
 import gspread
 from google.oauth2.service_account import Credentials
 from datetime import datetime, date
@@ -335,8 +334,8 @@ def participant_view(worksheet, query_params=None):
     
     # Ak je NFC mód, načítame údaje z IndexedDB/cookies/localStorage a automaticky vyberieme čas
     if nfc_mode:
-        # Použijeme components.html namiesto markdown, aby sa JavaScript spustil správne
-        components.html("""
+        # Použijeme components.html namiesto markdown, aby sa JavaScript správne spustil
+        html_code = """
         <script>
         (function() {
             const DB_NAME = 'GiantGymDB';
@@ -663,7 +662,9 @@ def participant_view(worksheet, query_params=None):
             setTimeout(hideJavaScriptCode, 500);
         })();
         </script>
-        """, height=0)
+        """
+        # Použijeme components.html namiesto markdown, aby sa JavaScript správne spustil
+        st.components.v1.html(html_code, height=0)
         
         # Zobrazíme informáciu - ak JavaScript presmeroval, táto časť sa nezobrazí
         # Ak údaje chýbajú, zobrazíme varovanie a pokračujeme ďalej
