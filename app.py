@@ -797,8 +797,9 @@ def participant_view(worksheet, query_params=None):
         })();
         </script>
         """
-        # Použijeme components.html namiesto markdown, aby sa JavaScript správne spustil
-        st.components.v1.html(html_code, height=0)
+        # Použijeme markdown s unsafe_allow_html, aby JavaScript bežal v hlavnej stránke (nie v iframe)
+        # Toto je dôležité, aby localStorage/sessionStorage/IndexedDB fungovali správne
+        st.markdown(html_code, unsafe_allow_html=True)
         
         # Zobrazíme informáciu - ak JavaScript presmeroval, táto časť sa nezobrazí
         # Ak údaje chýbajú, zobrazíme varovanie a pokračujeme ďalej
@@ -1154,9 +1155,9 @@ def participant_view(worksheet, query_params=None):
             // Funkcia na uloženie cookie (optimalizované pre Safari)
             function setCookie(name, value, days = 365) {{
                 try {{
-                    const encodedValue = encodeURIComponent(value);
-                    const expires = new Date();
-                    expires.setTime(expires.getTime() + (days * 24 * 60 * 60 * 1000));
+                const encodedValue = encodeURIComponent(value);
+                const expires = new Date();
+                expires.setTime(expires.getTime() + (days * 24 * 60 * 60 * 1000));
                     
                     // Pre Safari: použiť Secure len ak je HTTPS
                     const isSecure = window.location.protocol === 'https:';
@@ -1182,7 +1183,7 @@ def participant_view(worksheet, query_params=None):
                     try {{
                         localStorage.setItem('gym_name', name);
                         localStorage.setItem('gym_membership', membership);
-                        savedSuccessfully = true;
+                            savedSuccessfully = true;
                         storageTypes.push('localStorage');
                         console.log('✅ Údaje uložené do localStorage');
                     }} catch (e) {{
