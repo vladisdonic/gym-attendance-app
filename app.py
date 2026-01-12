@@ -1934,21 +1934,8 @@ def scanner_view(worksheet):
                     console.error('resultsDiv nie je dostupný!');
                 }
                 
-                // Zastaviť skenovanie
-                addDebugMsg('🛑 Zastavujem skenovanie...');
-                if (html5QrcodeScanner) {
-                    html5QrcodeScanner.clear().then(() => {
-                        addDebugMsg('✅ Skenovanie zastavené');
-                    }).catch(err => {
-                        addDebugMsg('❌ Chyba pri zastavení skenovania: ' + err.message);
-                        console.error('Chyba pri zastavení skenovania:', err);
-                    });
-                } else {
-                    addDebugMsg('⚠️ html5QrcodeScanner nie je dostupný');
-                }
-                
-                // Extrahovať parametre z URL
-                addDebugMsg('🔍 Začínam extrahovanie údajov z URL...');
+                // Extrahovať parametre z URL PRED zastavením scanneru
+                addDebugMsg('🔍 Začínam extrahovanie údajov z URL (PRED zastavením scanneru)');
                 try {
                     addDebugMsg('🔍 Začínam extrahovanie údajov z URL');
                     console.log('Začínam extrahovanie údajov z URL:', decodedText);
@@ -2045,7 +2032,23 @@ def scanner_view(worksheet):
                         }
                     }, 500);
                     
+                    // Zastaviť skenovanie AŽ PO vytvorení URL a nastavení timeoutu
+                    addDebugMsg('🛑 Zastavujem skenovanie po nastavení presmerovania...');
+                    if (html5QrcodeScanner) {
+                        html5QrcodeScanner.clear().then(() => {
+                            addDebugMsg('✅ Skenovanie zastavené');
+                        }).catch(err => {
+                            addDebugMsg('❌ Chyba pri zastavení skenovania: ' + err.message);
+                            console.error('Chyba pri zastavení skenovania:', err);
+                        });
+                    } else {
+                        addDebugMsg('⚠️ html5QrcodeScanner nie je dostupný');
+                    }
+                    
                 } catch (e) {
+                    addDebugMsg('❌ Chyba pri extrahovaní údajov z URL: ' + e.message);
+                    addDebugMsg('❌ Stack trace: ' + (e.stack ? e.stack.substring(0, 200) : 'N/A'));
+                    addDebugMsg('❌ decodedText: ' + (decodedText ? decodedText.substring(0, 100) : 'PRÁZDNY'));
                     console.error('Chyba pri extrahovaní údajov z URL:', e);
                     console.error('Stack trace:', e.stack);
                     console.error('decodedText hodnota:', decodedText);
