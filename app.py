@@ -1721,7 +1721,7 @@ def trainer_view(worksheet):
 
 
 def scanner_view():
-    """Pohľad pre QR kód scanner v gyme."""
+    """Pohľad pre QR kód scanner v gyme - používa JavaScript na dekódovanie v prehliadači."""
     st.title("📷 QR Kód Scanner - Gym")
     st.markdown("**Naskenuj QR kód pre automatické prihlásenie na tréning**")
     
@@ -1729,69 +1729,123 @@ def scanner_view():
     **Ako to funguje:**
     1. Používateľ otvorí svoj QR kód na telefóne
     2. Zameria fotoaparát tabletu/počítača na QR kód
-    3. Automaticky sa načíta URL a prihlási používateľa
+    3. **Automaticky sa rozpozná a prihlási** (bez potreby stlačiť tlačidlo)
     """)
     
-    # Upload obrázka z kamery
-    uploaded_file = st.camera_input("Naskenuj QR kód", key="qr_scanner")
+    # JavaScript riešenie s html5-qrcode knižnicou
+    scanner_html = """
+    <div id="qr-reader" style="width: 100%; max-width: 600px; margin: 0 auto;"></div>
+    <div id="qr-reader-results" style="margin-top: 20px;"></div>
     
-    if uploaded_file is not None:
-        try:
-            from pyzbar import pyzbar
-            from PIL import Image
-            import numpy as np
+    <script src="https://unpkg.com/html5-qrcode@2.3.8/html5-qrcode.min.js"></script>
+    <script>
+    (function() {
+        let html5QrcodeScanner = null;
+        let isScanning = false;
+        let lastScannedCode = null;
+        let scanCooldown = false;
+        
+        function onScanSuccess(decodedText, decodedResult) {
+            // Ignorovať duplikáty (rovnaký QR kód skenovaný viackrát)
+            if (decodedText === lastScannedCode && scanCooldown) {
+                return;
+            }
             
-            # Načítanie obrázka
-            image = Image.open(uploaded_file)
+            lastScannedCode = decodedText;
+            scanCooldown = true;
             
-            # Konverzia na numpy array
-            img_array = np.array(image)
+            // Resetovať cooldown po 2 sekundách
+            setTimeout(() => {
+                scanCooldown = false;
+            }, 2000);
             
-            # Dekódovanie QR kódu
-            decoded_objects = pyzbar.decode(img_array)
+            console.log('QR kód naskenovaný:', decodedText);
             
-            if decoded_objects:
-                qr_data = decoded_objects[0].data.decode('utf-8')
+            // Kontrola validity
+            if (decodedText.includes('giantgym.streamlit.app') && decodedText.includes('view=participant')) {
+                // Zobraziť úspech
+                const resultsDiv = document.getElementById('qr-reader-results');
+                resultsDiv.innerHTML = '<div style="padding: 15px; background-color: #d4edda; border-radius: 5px; color: #155724; font-weight: bold;">✅ QR kód rozpoznaný! Presmerovávam...</div>';
                 
-                st.success("✅ QR kód naskenovaný!")
-                st.info(f"**URL:** {qr_data}")
+                // Zastaviť skenovanie
+                if (html5QrcodeScanner) {
+                    html5QrcodeScanner.clear().catch(err => {
+                        console.error('Chyba pri zastavení skenovania:', err);
+                    });
+                }
                 
-                # Kontrola validity
-                if 'giantgym.streamlit.app' in qr_data and 'view=participant' in qr_data:
-                    st.balloons()
-                    st.markdown(f"""
-                    <script>
-                    setTimeout(function() {{
-                        window.location.href = '{qr_data}';
-                    }}, 1000);
-                    </script>
-                    """, unsafe_allow_html=True)
-                else:
-                    st.warning("⚠️ Tento QR kód nie je pre túto aplikáciu.")
-            else:
-                st.warning("⚠️ QR kód sa nepodarilo rozpoznať. Skús znova.")
+                // Presmerovať po 500ms
+                setTimeout(() => {
+                    window.location.href = decodedText;
+                }, 500);
+            } else {
+                // Neplatný QR kód
+                const resultsDiv = document.getElementById('qr-reader-results');
+                resultsDiv.innerHTML = '<div style="padding: 15px; background-color: #fff3cd; border-radius: 5px; color: #856404; font-weight: bold;">⚠️ Tento QR kód nie je pre túto aplikáciu.</div>';
                 
-        except ImportError as e:
-            st.error(f"""
-            ❌ **Chýba knižnica: {e}**
+                // Resetovať po 3 sekundách
+                setTimeout(() => {
+                    resultsDiv.innerHTML = '';
+                    lastScannedCode = null;
+                }, 3000);
+            }
+        }
+        
+        function onScanFailure(error) {
+            // Ignorovať chyby - len logovať
+            // console.log('Skenovanie pokračuje...', error);
+        }
+        
+        async function startScanner() {
+            if (isScanning) {
+                return;
+            }
             
-            Nainštaluj ju:
-            ```bash
-            pip install pyzbar numpy
-            ```
-            
-            **Pre Linux:**
-            ```bash
-            sudo apt-get install libzbar0
-            ```
-            
-            **Pre macOS:**
-            ```bash
-            brew install zbar
-            ```
-            """)
-        except Exception as e:
-            st.error(f"❌ Chyba pri dekódovaní QR kódu: {e}")
+            try {
+                isScanning = true;
+                html5QrcodeScanner = new Html5Qrcode("qr-reader");
+                
+                await html5QrcodeScanner.start(
+                    { facingMode: "environment" }, // Použiť zadnú kameru (ak je dostupná)
+                    {
+                        fps: 10, // Frames per second
+                        qrbox: { width: 250, height: 250 }, // Veľkosť skenovacieho boxu
+                        aspectRatio: 1.0
+                    },
+                    onScanSuccess,
+                    onScanFailure
+                );
+                
+                console.log('QR scanner spustený');
+            } catch (err) {
+                console.error('Chyba pri spustení scanneru:', err);
+                const resultsDiv = document.getElementById('qr-reader-results');
+                resultsDiv.innerHTML = '<div style="padding: 15px; background-color: #f8d7da; border-radius: 5px; color: #721c24;">❌ Chyba: ' + err.message + '<br><br>Skontroluj, či máš povolený prístup ku kamere.</div>';
+                isScanning = false;
+            }
+        }
+        
+        // Spustiť scanner po načítaní stránky
+        if (document.readyState === 'loading') {
+            document.addEventListener('DOMContentLoaded', startScanner);
+        } else {
+            // Malé oneskorenie pre istotu
+            setTimeout(startScanner, 500);
+        }
+        
+        // Cleanup pri opustení stránky
+        window.addEventListener('beforeunload', () => {
+            if (html5QrcodeScanner) {
+                html5QrcodeScanner.clear().catch(err => {
+                    console.error('Chyba pri cleanup:', err);
+                });
+            }
+        });
+    })();
+    </script>
+    """
+    
+    st.components.v1.html(scanner_html, height=500)
 
 
 def main():
