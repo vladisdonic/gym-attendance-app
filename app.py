@@ -963,7 +963,7 @@ def participant_view(worksheet, query_params=None):
             
         # Zobrazenie vygenerovanej URL pre NFC
         if st.session_state.get('personal_nfc_url') and not st.session_state.get('personal_qr_code'):
-            st.markdown("---")
+        st.markdown("---")
             st.success("✅ **URL pre NFC tag vygenerovaná!**")
             st.markdown("### 🔗 Tvoja osobná URL:")
             st.code(st.session_state['personal_nfc_url'], language="text")
@@ -1796,9 +1796,20 @@ def scanner_view():
             }, 2000);
             
             console.log('QR kód naskenovaný:', decodedText);
+            console.log('Typ decodedText:', typeof decodedText);
+            console.log('Obsahuje giantgym.streamlit.app?', decodedText.includes('giantgym.streamlit.app'));
+            console.log('Obsahuje view=participant?', decodedText.includes('view=participant'));
             
             // Kontrola validity - skontrolovať, či je to string
-            if (typeof decodedText === 'string' && decodedText.includes('giantgym.streamlit.app') && decodedText.includes('view=participant')) {
+            const isValid = typeof decodedText === 'string' && 
+                           decodedText.includes('giantgym.streamlit.app') && 
+                           decodedText.includes('view=participant');
+            
+            console.log('Validácia výsledok:', isValid);
+            
+            if (isValid) {
+                console.log('✅ Validný QR kód - začínam presmerovanie');
+                
                 // Zobraziť úspech
                 const resultsDiv = document.getElementById('qr-reader-results');
                 resultsDiv.innerHTML = '<div style="padding: 15px; background-color: #d4edda; border-radius: 5px; color: #155724; font-weight: bold;">✅ QR kód rozpoznaný! Presmerovávam...</div>';
@@ -1810,22 +1821,33 @@ def scanner_view():
                     });
                 }
                 
-                // Presmerovať po 500ms - použiť window.top pre presmerovanie celej stránky
-                setTimeout(() => {
-                    try {
-                        // Skúsiť presmerovať celú stránku (nie len iframe)
-                        const topWindow = window.top || window.parent || window;
-                        if (topWindow && topWindow !== window) {
+                // Presmerovať okamžite - použiť window.top pre presmerovanie celej stránky
+                try {
+                    console.log('Presmerovávam na:', decodedText);
+                    // Skúsiť presmerovať celú stránku (nie len iframe)
+                    const topWindow = window.top || window.parent || window;
+                    if (topWindow && topWindow !== window) {
+                        console.log('Používam window.top.location.replace');
+                        try {
+                            topWindow.location.replace(decodedText);
+                        } catch (e1) {
+                            console.log('window.top.location.replace zlyhal, skúšam href:', e1);
                             topWindow.location.href = decodedText;
-                        } else {
-                            window.location.href = decodedText;
                         }
-                    } catch (e) {
-                        // Ak window.top nie je dostupný (cross-origin), použiť window.location
-                        console.log('window.top nie je dostupný, používam window.location');
+                    } else {
+                        console.log('Používam window.location.replace');
+                        window.location.replace(decodedText);
+                    }
+                } catch (e) {
+                    // Ak window.top nie je dostupný (cross-origin), použiť window.location
+                    console.log('window.top nie je dostupný, používam window.location. Chyba:', e);
+                    try {
+                        window.location.replace(decodedText);
+                    } catch (e2) {
+                        console.log('window.location.replace zlyhal, skúšam href:', e2);
                         window.location.href = decodedText;
                     }
-                }, 500);
+                }
             } else {
                 // Neplatný QR kód alebo chyba
                 const resultsDiv = document.getElementById('qr-reader-results');
