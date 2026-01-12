@@ -963,7 +963,7 @@ def participant_view(worksheet, query_params=None):
             
         # Zobrazenie vygenerovanej URL pre NFC
         if st.session_state.get('personal_nfc_url') and not st.session_state.get('personal_qr_code'):
-            st.markdown("---")
+        st.markdown("---")
             st.success("✅ **URL pre NFC tag vygenerovaná!**")
             st.markdown("### 🔗 Tvoja osobná URL:")
             st.code(st.session_state['personal_nfc_url'], language="text")
@@ -1799,21 +1799,35 @@ def scanner_view(worksheet):
     
     # JavaScript riešenie s html5-qrcode knižnicou
     scanner_html = """
+    <div id="qr-scanner-debug" style="padding: 10px; background: #f0f0f0; border: 1px solid #ccc; margin: 10px 0; font-family: monospace; font-size: 12px; max-height: 200px; overflow-y: auto; position: relative; z-index: 1000;"></div>
     <div id="qr-reader" style="width: 100%; max-width: 600px; margin: 0 auto;"></div>
     <div id="qr-reader-results" style="margin-top: 20px;"></div>
-    <div id="qr-scanner-debug" style="padding: 10px; background: #f0f0f0; border: 1px solid #ccc; margin: 10px 0; font-family: monospace; font-size: 12px; max-height: 200px; overflow-y: auto;"></div>
     
     <script src="https://unpkg.com/html5-qrcode@2.3.8/html5-qrcode.min.js"></script>
     <script>
     // Debug funkcia - pridá správu do debug divu
     function addDebugMsg(msg) {
         try {
-            const debugDiv = document.getElementById('qr-scanner-debug');
-            if (debugDiv) {
-                const timestamp = new Date().toLocaleTimeString();
-                debugDiv.innerHTML += '[' + timestamp + '] ' + msg + '<br>';
-                debugDiv.scrollTop = debugDiv.scrollHeight; // Auto-scroll
+            let debugDiv = document.getElementById('qr-scanner-debug');
+            // Ak debug div neexistuje, vytvor ho
+            if (!debugDiv) {
+                debugDiv = document.createElement('div');
+                debugDiv.id = 'qr-scanner-debug';
+                debugDiv.style.cssText = 'padding: 10px; background: #f0f0f0; border: 1px solid #ccc; margin: 10px 0; font-family: monospace; font-size: 12px; max-height: 200px; overflow-y: auto; position: relative; z-index: 1000;';
+                // Vložiť na začiatok body alebo pred qr-reader
+                const qrReader = document.getElementById('qr-reader');
+                if (qrReader && qrReader.parentNode) {
+                    qrReader.parentNode.insertBefore(debugDiv, qrReader);
+                } else {
+                    document.body.insertBefore(debugDiv, document.body.firstChild);
+                }
             }
+            const timestamp = new Date().toLocaleTimeString();
+            debugDiv.innerHTML += '[' + timestamp + '] ' + msg + '<br>';
+            debugDiv.scrollTop = debugDiv.scrollHeight; // Auto-scroll
+            // Zabezpečiť, že debug div je viditeľný
+            debugDiv.style.display = 'block';
+            debugDiv.style.visibility = 'visible';
             console.log(msg);
         } catch (e) {
             console.error('Chyba pri pridávaní debug správy:', e);
@@ -1822,6 +1836,16 @@ def scanner_view(worksheet):
     
     // Debug - zobraziť, či sa JavaScript spúšťa
     try {
+        // Zabezpečiť, že debug div existuje a je viditeľný
+        setTimeout(function() {
+            const debugDiv = document.getElementById('qr-scanner-debug');
+            if (debugDiv) {
+                debugDiv.style.display = 'block';
+                debugDiv.style.visibility = 'visible';
+                debugDiv.style.opacity = '1';
+            }
+        }, 100);
+        
         addDebugMsg('🔍 QR Scanner Script sa začal načítavať...');
         addDebugMsg('🔍 document.readyState: ' + document.readyState);
         addDebugMsg('🔍 window.location: ' + window.location.href);
