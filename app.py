@@ -1765,6 +1765,23 @@ def scanner_view():
         let scanCooldown = false;
         
         function onScanSuccess(decodedText, decodedResult) {
+            // Debug - zobraziť všetky parametre
+            console.log('onScanSuccess called with:', { decodedText, decodedResult });
+            
+            // Skontrolovať, či je decodedText definovaný
+            if (!decodedText) {
+                console.error('decodedText je undefined!', decodedResult);
+                // Skúsiť získať text z decodedResult
+                if (decodedResult && decodedResult.text) {
+                    decodedText = decodedResult.text;
+                } else if (decodedResult && typeof decodedResult === 'string') {
+                    decodedText = decodedResult;
+                } else {
+                    console.error('Nepodarilo sa získať text z QR kódu');
+                    return;
+                }
+            }
+            
             // Ignorovať duplikáty (rovnaký QR kód skenovaný viackrát)
             if (decodedText === lastScannedCode && scanCooldown) {
                 return;
@@ -1780,8 +1797,8 @@ def scanner_view():
             
             console.log('QR kód naskenovaný:', decodedText);
             
-            // Kontrola validity
-            if (decodedText.includes('giantgym.streamlit.app') && decodedText.includes('view=participant')) {
+            // Kontrola validity - skontrolovať, či je to string
+            if (typeof decodedText === 'string' && decodedText.includes('giantgym.streamlit.app') && decodedText.includes('view=participant')) {
                 // Zobraziť úspech
                 const resultsDiv = document.getElementById('qr-reader-results');
                 resultsDiv.innerHTML = '<div style="padding: 15px; background-color: #d4edda; border-radius: 5px; color: #155724; font-weight: bold;">✅ QR kód rozpoznaný! Presmerovávam...</div>';
@@ -1793,20 +1810,43 @@ def scanner_view():
                     });
                 }
                 
-                // Presmerovať po 500ms
+                // Presmerovať po 500ms - použiť window.top pre presmerovanie celej stránky
                 setTimeout(() => {
-                    window.location.href = decodedText;
+                    try {
+                        // Skúsiť presmerovať celú stránku (nie len iframe)
+                        const topWindow = window.top || window.parent || window;
+                        if (topWindow && topWindow !== window) {
+                            topWindow.location.href = decodedText;
+                        } else {
+                            window.location.href = decodedText;
+                        }
+                    } catch (e) {
+                        // Ak window.top nie je dostupný (cross-origin), použiť window.location
+                        console.log('window.top nie je dostupný, používam window.location');
+                        window.location.href = decodedText;
+                    }
                 }, 500);
             } else {
-                // Neplatný QR kód
+                // Neplatný QR kód alebo chyba
                 const resultsDiv = document.getElementById('qr-reader-results');
-                resultsDiv.innerHTML = '<div style="padding: 15px; background-color: #fff3cd; border-radius: 5px; color: #856404; font-weight: bold;">⚠️ Tento QR kód nie je pre túto aplikáciu.</div>';
+                let errorMsg = '⚠️ Tento QR kód nie je pre túto aplikáciu.';
                 
-                // Resetovať po 3 sekundách
+                // Debug - zobraziť, čo bolo naskenované
+                if (decodedText) {
+                    errorMsg += '<br><br><small>Naskenovaný text: ' + decodedText.substring(0, 100) + '</small>';
+                    console.log('Neplatný QR kód:', decodedText);
+                } else {
+                    errorMsg += '<br><br><small>QR kód sa naskenoval, ale text je prázdny.</small>';
+                    console.error('QR kód bez textu:', decodedResult);
+                }
+                
+                resultsDiv.innerHTML = '<div style="padding: 15px; background-color: #fff3cd; border-radius: 5px; color: #856404; font-weight: bold;">' + errorMsg + '</div>';
+                
+                // Resetovať po 5 sekundách
                 setTimeout(() => {
                     resultsDiv.innerHTML = '';
                     lastScannedCode = null;
-                }, 3000);
+                }, 5000);
             }
         }
         
@@ -1857,8 +1897,15 @@ def scanner_view():
                             aspectRatio: 1.0,
                             disableFlip: false
                         },
-                        onScanSuccess,
-                        onScanFailure
+                        (decodedText, decodedResult) => {
+                            // Wrapper pre callback - zabezpečí správne parametre
+                            console.log('QR scanner callback:', { decodedText, decodedResult });
+                            onScanSuccess(decodedText, decodedResult);
+                        },
+                        (errorMessage) => {
+                            // Wrapper pre error callback
+                            onScanFailure(errorMessage);
+                        }
                     );
                     
                     console.log('QR scanner spustený s konfiguráciou:', cameraConfigs[i]);
