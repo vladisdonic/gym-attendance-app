@@ -1727,10 +1727,29 @@ def scanner_view():
     
     st.info("""
     **Ako to funguje:**
-    1. Používateľ otvorí svoj QR kód na telefóne
-    2. Zameria fotoaparát tabletu/počítača na QR kód
-    3. **Automaticky sa rozpozná a prihlási** (bez potreby stlačiť tlačidlo)
+    1. **Povol prístup ku kamere** - klikni na ikonu kamery v adresnom riadku a povoľ prístup
+    2. Používateľ otvorí svoj QR kód na telefóne
+    3. Zameria fotoaparát tabletu/počítača na QR kód
+    4. **Automaticky sa rozpozná a prihlási** (bez potreby stlačiť tlačidlo)
     """)
+    
+    # Tlačidlo na manuálne spustenie scanneru
+    if st.button("🔄 Spustiť Scanner", key="start_scanner", use_container_width=True, type="primary"):
+        st.session_state['restart_scanner'] = True
+        st.rerun()
+    
+    # JavaScript na manuálne spustenie scanneru (ak bolo stlačené tlačidlo)
+    if st.session_state.get('restart_scanner'):
+        st.markdown("""
+        <script>
+        if (window.restartScanner) {
+            setTimeout(function() {
+                window.restartScanner();
+            }, 500);
+        }
+        </script>
+        """, unsafe_allow_html=True)
+        del st.session_state['restart_scanner']
     
     # JavaScript riešenie s html5-qrcode knižnicou
     scanner_html = """
@@ -1801,29 +1820,104 @@ def scanner_view():
                 return;
             }
             
-            try {
-                isScanning = true;
-                html5QrcodeScanner = new Html5Qrcode("qr-reader");
-                
-                await html5QrcodeScanner.start(
-                    { facingMode: "environment" }, // Použiť zadnú kameru (ak je dostupná)
-                    {
-                        fps: 10, // Frames per second
-                        qrbox: { width: 250, height: 250 }, // Veľkosť skenovacieho boxu
-                        aspectRatio: 1.0
-                    },
-                    onScanSuccess,
-                    onScanFailure
-                );
-                
-                console.log('QR scanner spustený');
-            } catch (err) {
-                console.error('Chyba pri spustení scanneru:', err);
-                const resultsDiv = document.getElementById('qr-reader-results');
-                resultsDiv.innerHTML = '<div style="padding: 15px; background-color: #f8d7da; border-radius: 5px; color: #721c24;">❌ Chyba: ' + err.message + '<br><br>Skontroluj, či máš povolený prístup ku kamere.</div>';
-                isScanning = false;
+            const resultsDiv = document.getElementById('qr-reader-results');
+            
+            // Skúsiť najprv zadnú kameru (environment), potom prednú (user)
+            const cameraConfigs = [
+                { facingMode: "environment" }, // Zadná kamera (pre tablety/telefóny)
+                { facingMode: "user" },         // Predná kamera (pre počítače)
+                { facingMode: { exact: "environment" } }, // Presne zadná
+                { facingMode: { exact: "user" } }        // Presne predná
+            ];
+            
+            for (let i = 0; i < cameraConfigs.length; i++) {
+                try {
+                    isScanning = true;
+                    html5QrcodeScanner = new Html5Qrcode("qr-reader");
+                    
+                    // Zobraziť správu o pokuse
+                    if (i > 0) {
+                        resultsDiv.innerHTML = '<div style="padding: 10px; background-color: #d1ecf1; border-radius: 5px; color: #0c5460;">🔄 Skúšam inú kameru...</div>';
+                    }
+                    
+                    await html5QrcodeScanner.start(
+                        cameraConfigs[i],
+                        {
+                            fps: 10,
+                            qrbox: function(viewfinderWidth, viewfinderHeight) {
+                                // Dynamická veľkosť skenovacieho boxu (50% viewfinder)
+                                let minEdgePercentage = 0.5;
+                                let minEdgeSize = Math.min(viewfinderWidth, viewfinderHeight);
+                                let qrboxSize = Math.floor(minEdgeSize * minEdgePercentage);
+                                return {
+                                    width: qrboxSize,
+                                    height: qrboxSize
+                                };
+                            },
+                            aspectRatio: 1.0,
+                            disableFlip: false
+                        },
+                        onScanSuccess,
+                        onScanFailure
+                    );
+                    
+                    console.log('QR scanner spustený s konfiguráciou:', cameraConfigs[i]);
+                    resultsDiv.innerHTML = '<div style="padding: 10px; background-color: #d4edda; border-radius: 5px; color: #155724;">✅ Kamera pripravená! Namier na QR kód...</div>';
+                    return; // Úspešne spustené
+                    
+                } catch (err) {
+                    console.log('Pokus ' + (i + 1) + ' zlyhal:', err.message);
+                    
+                    // Ak už máme scanner, skúsime ho zastaviť
+                    if (html5QrcodeScanner) {
+                        try {
+                            await html5QrcodeScanner.clear();
+                        } catch (clearErr) {
+                            console.log('Chyba pri cleanup:', clearErr);
+                        }
+                        html5QrcodeScanner = null;
+                    }
+                    
+                    // Ak je to posledný pokus, zobraziť chybu
+                    if (i === cameraConfigs.length - 1) {
+                        let errorMsg = '❌ Nepodarilo sa spustiť kameru.';
+                        
+                        if (err.name === 'NotAllowedError' || err.message.includes('Permission denied')) {
+                            errorMsg += '<br><br><strong>Kamera nemá povolený prístup.</strong><br><br>';
+                            errorMsg += '1. Klikni na ikonu kamery v adresnom riadku prehliadača<br>';
+                            errorMsg += '2. Povoľ prístup ku kamere<br>';
+                            errorMsg += '3. Obnov stránku (F5 alebo Cmd+R)';
+                        } else if (err.name === 'NotFoundError' || err.message.includes('No camera')) {
+                            errorMsg += '<br><br><strong>Kamera sa nenašla.</strong><br><br>';
+                            errorMsg += 'Skontroluj, či je kamera pripojená a funguje.';
+                        } else {
+                            errorMsg += '<br><br>Chyba: ' + err.message;
+                        }
+                        
+                        resultsDiv.innerHTML = '<div style="padding: 15px; background-color: #f8d7da; border-radius: 5px; color: #721c24;">' + errorMsg + '</div>';
+                        isScanning = false;
+                    }
+                }
             }
         }
+        
+        // Funkcia na manuálne spustenie scanneru
+        window.restartScanner = function() {
+            if (html5QrcodeScanner) {
+                html5QrcodeScanner.clear().then(() => {
+                    html5QrcodeScanner = null;
+                    isScanning = false;
+                    startScanner();
+                }).catch(err => {
+                    console.error('Chyba pri cleanup:', err);
+                    html5QrcodeScanner = null;
+                    isScanning = false;
+                    startScanner();
+                });
+            } else {
+                startScanner();
+            }
+        };
         
         // Spustiť scanner po načítaní stránky
         if (document.readyState === 'loading') {
