@@ -1754,17 +1754,19 @@ def scanner_view(worksheet):
                 setTimeout(function() {
                     // Vyčistiť query params a presmerovať na scanner view
                     const cleanUrl = window.location.pathname + '?view=scanner';
-                    if (window.top && window.top !== window) {
-                        window.top.location.href = cleanUrl;
-                    } else {
-                        window.location.href = cleanUrl;
+                    try {
+                        if (window.top && window.top !== window) {
+                            window.top.location.href = cleanUrl;
+                        } else {
+                            window.location.href = cleanUrl;
+                        }
+                    } catch (e) {
+                        // Fallback - skúsiť window.open
+                        window.open(cleanUrl, '_top');
                     }
                 }, 2000);
                 </script>
                 """, unsafe_allow_html=True)
-                
-                # Nastaviť flag, že sa má znova spustiť scanner po rerun
-                st.session_state['restart_scanner_after_success'] = True
             else:
                 st.error("❌ Chyba pri prihlásení. Skús znova.")
         else:
