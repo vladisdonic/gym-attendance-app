@@ -963,7 +963,7 @@ def participant_view(worksheet, query_params=None):
             
         # Zobrazenie vygenerovanej URL pre NFC
         if st.session_state.get('personal_nfc_url') and not st.session_state.get('personal_qr_code'):
-        st.markdown("---")
+            st.markdown("---")
             st.success("✅ **URL pre NFC tag vygenerovaná!**")
             st.markdown("### 🔗 Tvoja osobná URL:")
             st.code(st.session_state['personal_nfc_url'], language="text")
@@ -1758,6 +1758,14 @@ def scanner_view():
     
     <script src="https://unpkg.com/html5-qrcode@2.3.8/html5-qrcode.min.js"></script>
     <script>
+    // Skontrolovať, či sa knižnica načítala
+    if (typeof Html5Qrcode === 'undefined') {
+        console.error('❌ Html5Qrcode knižnica sa nenačítala!');
+        document.getElementById('qr-reader-results').innerHTML = '<div style="padding: 15px; background-color: #f8d7da; border-radius: 5px; color: #721c24;">❌ Chyba: QR scanner knižnica sa nenačítala. Skús obnoviť stránku.</div>';
+    } else {
+        console.log('✅ Html5Qrcode knižnica sa načítala');
+    }
+    
     (function() {
         let html5QrcodeScanner = null;
         let isScanning = false;
@@ -1988,11 +1996,20 @@ def scanner_view():
             }
         };
         
+        // Debug - zobraziť, že JavaScript sa načítal
+        console.log('QR Scanner JavaScript sa načítal');
+        console.log('Html5Qrcode dostupný:', typeof Html5Qrcode !== 'undefined');
+        console.log('qr-reader element:', document.getElementById('qr-reader'));
+        
         // Spustiť scanner po načítaní stránky
         if (document.readyState === 'loading') {
-            document.addEventListener('DOMContentLoaded', startScanner);
+            document.addEventListener('DOMContentLoaded', function() {
+                console.log('DOMContentLoaded - spúšťam scanner');
+                setTimeout(startScanner, 500);
+            });
         } else {
             // Malé oneskorenie pre istotu
+            console.log('DOM už načítaný - spúšťam scanner');
             setTimeout(startScanner, 500);
         }
         
