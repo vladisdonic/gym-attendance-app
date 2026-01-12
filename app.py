@@ -1744,25 +1744,33 @@ def scanner_view(worksheet):
             client_timestamp = datetime.now().strftime("%H:%M:%S")
             
             if add_attendance(worksheet, name, membership, time, client_timestamp):
-                st.success("🎉 **Úspešne prihlásený/á!**")
+                # Zobraziť len úspešnú hlášku
+                st.success(f"🎉 **{name}** úspešne prihlásený/á na tréning **{time}**!")
                 st.balloons()
-                st.info(f"**Meno:** {name}  \n**Typ členstva:** {membership}  \n**Čas tréningu:** {time}")
                 
-                # Vyčistiť query params (presmerovať bez parametrov)
+                # Automaticky vyčistiť query params a znova spustiť scanner po 2 sekundách
                 st.markdown("""
                 <script>
                 setTimeout(function() {
+                    // Vyčistiť query params
                     const cleanUrl = window.location.pathname + '?view=scanner';
                     window.history.replaceState({}, '', cleanUrl);
-                }, 100);
+                    
+                    // Znova spustiť scanner
+                    if (window.restartScanner) {
+                        setTimeout(function() {
+                            window.restartScanner();
+                        }, 500);
+                    }
+                }, 2000);
                 </script>
                 """, unsafe_allow_html=True)
                 
-                # Zobraziť tlačidlo na nové skenovanie
-                st.markdown("---")
-                if st.button("🔄 Naskenovať ďalší QR kód", use_container_width=True, type="primary"):
-                    st.rerun()
-                return  # Ukončiť renderovanie, aby sa nezobrazil scanner znova
+                # Automaticky rerun po 2 sekundách (pre vyčistenie query params a znova spustenie scanneru)
+                import time
+                time.sleep(2)
+                st.query_params.clear()
+                st.rerun()
             else:
                 st.error("❌ Chyba pri prihlásení. Skús znova.")
         else:
