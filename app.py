@@ -1754,16 +1754,7 @@ def scanner_view(worksheet):
                 setTimeout(function() {
                     // Vyčistiť query params a presmerovať na scanner view
                     const cleanUrl = window.location.pathname + '?view=scanner';
-                    try {
-                        if (window.top && window.top !== window) {
-                            window.top.location.href = cleanUrl;
-                        } else {
-                            window.location.href = cleanUrl;
-                        }
-                    } catch (e) {
-                        // Fallback - skúsiť window.open
-                        window.open(cleanUrl, '_top');
-                    }
+                    window.location.href = cleanUrl;
                 }, 2000);
                 </script>
                 """, unsafe_allow_html=True)
@@ -1991,49 +1982,30 @@ def scanner_view(worksheet):
                         addDebugMsg('🚀 Spúšťam presmerovanie...');
                         console.log('Spúšťam presmerovanie...');
                         
+                        // Keďže už nie sme v iframe, môžeme použiť priamo window.location
                         try {
-                            // Skúsiť window.open s _top targetom (funguje aj v iframe)
-                            addDebugMsg('🌐 Používam window.open s _top targetom');
-                            console.log('Používam window.open s _top targetom');
-                            const opened = window.open(newUrl, '_top');
-                            if (opened) {
-                                addDebugMsg('✅ Presmerovanie dokončené cez window.open');
-                                console.log('Presmerovanie dokončené cez window.open');
-                            } else {
-                                throw new Error('window.open vrátil null');
-                            }
+                            addDebugMsg('🌐 Používam window.location.href');
+                            console.log('Používam window.location.href');
+                            window.location.href = newUrl;
+                            addDebugMsg('✅ Presmerovanie dokončené');
+                            console.log('Presmerovanie dokončené');
                         } catch (e) {
-                            addDebugMsg('❌ Chyba pri presmerovaní cez window.open: ' + e.message);
-                            console.error('Chyba pri presmerovaní cez window.open:', e);
+                            addDebugMsg('❌ Chyba pri presmerovaní: ' + e.message);
+                            console.error('Chyba pri presmerovaní:', e);
                             
-                            // Fallback 1 - skúsiť window.top.location.href
+                            // Fallback - skúsiť window.location.replace
                             try {
-                                addDebugMsg('🔄 Fallback 1: používam window.top.location.href');
-                                console.log('Fallback 1: používam window.top.location.href');
-                                if (window.top && window.top !== window) {
-                                    window.top.location.href = newUrl;
-                                    addDebugMsg('✅ Presmerovanie cez window.top.location.href');
-                                } else {
-                                    throw new Error('window.top nie je dostupný');
-                                }
+                                addDebugMsg('🔄 Fallback: používam window.location.replace');
+                                console.log('Fallback: používam window.location.replace');
+                                window.location.replace(newUrl);
+                                addDebugMsg('✅ Presmerovanie cez window.location.replace');
                             } catch (e2) {
-                                addDebugMsg('❌ Fallback 1 zlyhal: ' + e2.message);
-                                console.error('Fallback 1 zlyhal:', e2);
+                                addDebugMsg('❌ Aj fallback zlyhal: ' + e2.message);
+                                console.error('Aj fallback zlyhal:', e2);
                                 
-                                // Fallback 2 - skúsiť window.location.href
-                                try {
-                                    addDebugMsg('🔄 Fallback 2: používam window.location.href');
-                                    console.log('Fallback 2: používam window.location.href');
-                                    window.location.href = newUrl;
-                                    addDebugMsg('✅ Presmerovanie cez window.location.href');
-                                } catch (e3) {
-                                    addDebugMsg('❌ Aj fallback 2 zlyhal: ' + e3.message);
-                                    console.error('Aj fallback 2 zlyhal:', e3);
-                                    
-                                    // Posledný pokus - zobraziť chybu a link
-                                    if (resultsDiv) {
-                                        resultsDiv.innerHTML = '<div style="padding: 15px; background-color: #f8d7da; border-radius: 5px; color: #721c24;">❌ Chyba pri presmerovaní. <a href="' + newUrl + '" target="_top" style="color: #721c24; text-decoration: underline;">Klikni tu pre manuálne presmerovanie</a></div>';
-                                    }
+                                // Posledný pokus - zobraziť chybu a link
+                                if (resultsDiv) {
+                                    resultsDiv.innerHTML = '<div style="padding: 15px; background-color: #f8d7da; border-radius: 5px; color: #721c24;">❌ Chyba pri presmerovaní. <a href="' + newUrl + '" style="color: #721c24; text-decoration: underline;">Klikni tu pre manuálne presmerovanie</a></div>';
                                 }
                             }
                         }
