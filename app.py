@@ -963,7 +963,7 @@ def participant_view(worksheet, query_params=None):
             
         # Zobrazenie vygenerovanej URL pre NFC
         if st.session_state.get('personal_nfc_url') and not st.session_state.get('personal_qr_code'):
-            st.markdown("---")
+        st.markdown("---")
             st.success("✅ **URL pre NFC tag vygenerovaná!**")
             st.markdown("### 🔗 Tvoja osobná URL:")
             st.code(st.session_state['personal_nfc_url'], language="text")
@@ -1801,24 +1801,30 @@ def scanner_view(worksheet):
     scanner_html = """
     <div id="qr-reader" style="width: 100%; max-width: 600px; margin: 0 auto;"></div>
     <div id="qr-reader-results" style="margin-top: 20px;"></div>
+    <div id="qr-scanner-debug" style="padding: 10px; background: #f0f0f0; border: 1px solid #ccc; margin: 10px 0; font-family: monospace; font-size: 12px; max-height: 200px; overflow-y: auto;"></div>
     
     <script src="https://unpkg.com/html5-qrcode@2.3.8/html5-qrcode.min.js"></script>
     <script>
-    // Debug - zobraziť alert, aby sme videli, či sa JavaScript spúšťa
-    try {
-        console.log('🔍 QR Scanner Script sa začal načítavať...');
-        console.log('🔍 document.readyState:', document.readyState);
-        console.log('🔍 window.location:', window.location.href);
-        
-        // Zobraziť aj v DOM, aby sme videli, či sa JavaScript spúšťa
-        const debugDiv = document.createElement('div');
-        debugDiv.id = 'qr-scanner-debug';
-        debugDiv.style.cssText = 'padding: 10px; background: #f0f0f0; border: 1px solid #ccc; margin: 10px 0; font-family: monospace; font-size: 12px;';
-        debugDiv.innerHTML = '🔍 QR Scanner Script sa začal načítavať...<br>document.readyState: ' + document.readyState + '<br>window.location: ' + window.location.href;
-        const resultsDiv = document.getElementById('qr-reader-results');
-        if (resultsDiv && resultsDiv.parentNode) {
-            resultsDiv.parentNode.insertBefore(debugDiv, resultsDiv);
+    // Debug funkcia - pridá správu do debug divu
+    function addDebugMsg(msg) {
+        try {
+            const debugDiv = document.getElementById('qr-scanner-debug');
+            if (debugDiv) {
+                const timestamp = new Date().toLocaleTimeString();
+                debugDiv.innerHTML += '[' + timestamp + '] ' + msg + '<br>';
+                debugDiv.scrollTop = debugDiv.scrollHeight; // Auto-scroll
+            }
+            console.log(msg);
+        } catch (e) {
+            console.error('Chyba pri pridávaní debug správy:', e);
         }
+    }
+    
+    // Debug - zobraziť, či sa JavaScript spúšťa
+    try {
+        addDebugMsg('🔍 QR Scanner Script sa začal načítavať...');
+        addDebugMsg('🔍 document.readyState: ' + document.readyState);
+        addDebugMsg('🔍 window.location: ' + window.location.href);
     } catch (e) {
         console.error('Chyba pri inicializácii debug:', e);
     }
@@ -1845,6 +1851,7 @@ def scanner_view(worksheet):
         
         function onScanSuccess(decodedText, decodedResult) {
             // Debug - zobraziť všetky parametre
+            addDebugMsg('✅ onScanSuccess called');
             console.log('onScanSuccess called with:', { decodedText, decodedResult });
             
             // Skontrolovať, či je decodedText definovaný
@@ -1874,6 +1881,7 @@ def scanner_view(worksheet):
                 scanCooldown = false;
             }, 2000);
             
+            addDebugMsg('📱 QR kód naskenovaný: ' + (decodedText ? decodedText.substring(0, 50) + '...' : 'PRÁZDNY'));
             console.log('QR kód naskenovaný:', decodedText);
             console.log('Typ decodedText:', typeof decodedText);
             console.log('Obsahuje giantgym.streamlit.app?', decodedText.includes('giantgym.streamlit.app'));
@@ -1884,17 +1892,21 @@ def scanner_view(worksheet):
                            decodedText.includes('giantgym.streamlit.app') && 
                            decodedText.includes('view=participant');
             
+            addDebugMsg('🔍 Validácia výsledok: ' + isValid);
             console.log('Validácia výsledok:', isValid);
             
             if (isValid) {
+                addDebugMsg('✅ Validný QR kód - extrahujem údaje');
                 console.log('✅ Validný QR kód - extrahujem údaje');
                 
                 // Zobraziť úspech OKAMŽITE (pred extrahovaním)
                 const resultsDiv = document.getElementById('qr-reader-results');
                 if (resultsDiv) {
                     resultsDiv.innerHTML = '<div style="padding: 15px; background-color: #d4edda; border-radius: 5px; color: #155724; font-weight: bold;">✅ QR kód rozpoznaný! Registrujem na pozadí...</div>';
+                    addDebugMsg('✅ Hláška zobrazená v resultsDiv');
                     console.log('Hláška zobrazená');
                 } else {
+                    addDebugMsg('❌ resultsDiv nie je dostupný!');
                     console.error('resultsDiv nie je dostupný!');
                 }
                 
@@ -1907,22 +1919,28 @@ def scanner_view(worksheet):
                 
                 // Extrahovať parametre z URL
                 try {
+                    addDebugMsg('🔍 Začínam extrahovanie údajov z URL');
                     console.log('Začínam extrahovanie údajov z URL:', decodedText);
                     const url = new URL(decodedText);
+                    addDebugMsg('✅ URL objekt vytvorený');
                     console.log('URL objekt vytvorený:', url);
                     const params = new URLSearchParams(url.search);
+                    addDebugMsg('✅ URLSearchParams vytvorené');
                     console.log('URLSearchParams vytvorené');
                     const name = params.get('name') || '';
                     const membership = params.get('membership') || '';
                     const time = params.get('time') || '';
                     
+                    addDebugMsg('📋 Extrahované údaje: name=' + name + ', membership=' + membership + ', time=' + time);
                     console.log('Extrahované údaje:', { name, membership, time });
                     
                     // Odoslať údaje na server cez query params
+                    addDebugMsg('🔗 Vytváram novú URL...');
                     console.log('Vytváram novú URL...');
                     
                     // Použiť absolútnu URL namiesto relatívnej (pre iframe kompatibilitu)
                     const baseUrl = 'https://giantgym.streamlit.app/';
+                    addDebugMsg('🔗 baseUrl: ' + baseUrl);
                     console.log('baseUrl:', baseUrl);
                     
                     const newParams = new URLSearchParams();
@@ -1935,13 +1953,16 @@ def scanner_view(worksheet):
                     newParams.set('qr_submit', '1');
                     
                     const newUrl = baseUrl + '?' + newParams.toString();
+                    addDebugMsg('🔗 Nová URL vytvorená: ' + newUrl);
                     console.log('Nová URL vytvorená:', newUrl);
                     
                     // Presmerovať na tú istú stránku s parametrami (Streamlit ich spracuje)
+                    addDebugMsg('⏳ Začínam presmerovanie za 500ms...');
                     console.log('Začínam presmerovanie na:', newUrl);
                     
                     // Malé oneskorenie, aby sa hláška stihla zobraziť
                     setTimeout(() => {
+                        addDebugMsg('🚀 Spúšťam presmerovanie...');
                         console.log('Spúšťam presmerovanie...');
                         console.log('window:', window);
                         console.log('window.top:', window.top);
@@ -1951,25 +1972,31 @@ def scanner_view(worksheet):
                         try {
                             // Skúsiť najprv window.top (pre iframe)
                             if (window.top && window.top !== window) {
+                                addDebugMsg('🌐 Používam window.top.location.replace');
                                 console.log('Používam window.top.location.replace');
                                 window.top.location.replace(newUrl);
                             } 
                             // Potom window.parent
                             else if (window.parent && window.parent !== window) {
+                                addDebugMsg('🌐 Používam window.parent.location.replace');
                                 console.log('Používam window.parent.location.replace');
                                 window.parent.location.replace(newUrl);
                             }
                             // Nakoniec window.location
                             else {
+                                addDebugMsg('🌐 Používam window.location.replace');
                                 console.log('Používam window.location.replace');
                                 window.location.replace(newUrl);
                             }
+                            addDebugMsg('✅ Presmerovanie dokončené');
                             console.log('Presmerovanie dokončené');
                         } catch (e) {
+                            addDebugMsg('❌ Chyba pri presmerovaní: ' + e.message);
                             console.error('Chyba pri presmerovaní:', e);
                             console.error('Stack trace:', e.stack);
                             // Fallback - skúsiť window.location.href
                             try {
+                                addDebugMsg('🔄 Fallback: používam window.location.href');
                                 console.log('Fallback: používam window.location.href');
                                 if (window.top && window.top !== window) {
                                     window.top.location.href = newUrl;
@@ -1977,6 +2004,7 @@ def scanner_view(worksheet):
                                     window.location.href = newUrl;
                                 }
                             } catch (e2) {
+                                addDebugMsg('❌ Aj fallback zlyhal: ' + e2.message);
                                 console.error('Aj fallback zlyhal:', e2);
                                 // Posledný pokus - zobraziť chybu
                                 if (resultsDiv) {
@@ -2024,18 +2052,22 @@ def scanner_view(worksheet):
         }
         
         async function startScanner() {
+            addDebugMsg('🎬 startScanner volaná');
             console.log('🔍 startScanner volaná');
             console.log('🔍 isScanning:', isScanning);
             
             if (isScanning) {
+                addDebugMsg('⏸️ Scanner už beží, preskakujem');
                 console.log('🔍 Scanner už beží, preskakujem');
                 return;
             }
             
             const resultsDiv = document.getElementById('qr-reader-results');
+            addDebugMsg('🔍 resultsDiv: ' + (resultsDiv ? 'OK' : 'NIE JE DOSTUPNÝ'));
             console.log('🔍 resultsDiv:', resultsDiv);
             
             if (!resultsDiv) {
+                addDebugMsg('❌ resultsDiv nie je dostupný!');
                 console.error('🔍 resultsDiv nie je dostupný!');
             }
             
@@ -2085,8 +2117,10 @@ def scanner_view(worksheet):
                         }
                     );
                     
+                    addDebugMsg('✅ QR scanner spustený s konfiguráciou: ' + JSON.stringify(cameraConfigs[i]));
                     console.log('QR scanner spustený s konfiguráciou:', cameraConfigs[i]);
                     resultsDiv.innerHTML = '<div style="padding: 10px; background-color: #d4edda; border-radius: 5px; color: #155724;">✅ Kamera pripravená! Namier na QR kód...</div>';
+                    addDebugMsg('📷 Kamera pripravená!');
                     return; // Úspešne spustené
                     
                 } catch (err) {
@@ -2144,6 +2178,12 @@ def scanner_view(worksheet):
         };
         
         // Debug - zobraziť, že JavaScript sa načítal
+        addDebugMsg('✅ QR Scanner JavaScript sa načítal');
+        addDebugMsg('🔍 Html5Qrcode dostupný: ' + (typeof Html5Qrcode !== 'undefined'));
+        addDebugMsg('🔍 qr-reader element: ' + (document.getElementById('qr-reader') ? 'OK' : 'NIE JE'));
+        addDebugMsg('🔍 qr-reader-results element: ' + (document.getElementById('qr-reader-results') ? 'OK' : 'NIE JE'));
+        addDebugMsg('🔍 window.top: ' + (window.top ? 'OK' : 'NIE JE'));
+        addDebugMsg('🔍 window.parent: ' + (window.parent ? 'OK' : 'NIE JE'));
         console.log('🔍 QR Scanner JavaScript sa načítal');
         console.log('🔍 Html5Qrcode dostupný:', typeof Html5Qrcode !== 'undefined');
         console.log('🔍 qr-reader element:', document.getElementById('qr-reader'));
@@ -2154,33 +2194,43 @@ def scanner_view(worksheet):
         
         // Spustiť scanner po načítaní stránky
         function initScanner() {
+            addDebugMsg('🚀 initScanner volaná');
+            addDebugMsg('🔍 document.readyState: ' + document.readyState);
+            addDebugMsg('🔍 isScanning: ' + isScanning);
             console.log('🔍 initScanner volaná');
             console.log('🔍 document.readyState:', document.readyState);
             console.log('🔍 isScanning:', isScanning);
             if (!isScanning) {
+                addDebugMsg('▶️ Volám startScanner...');
                 console.log('🔍 Volám startScanner...');
                 startScanner();
             } else {
+                addDebugMsg('⏸️ Scanner už beží, preskakujem');
                 console.log('🔍 Scanner už beží, preskakujem');
             }
         }
         
         if (document.readyState === 'loading') {
+            addDebugMsg('⏳ DOM sa ešte načítava, čakám na DOMContentLoaded');
             console.log('🔍 DOM sa ešte načítava, čakám na DOMContentLoaded');
             document.addEventListener('DOMContentLoaded', function() {
+                addDebugMsg('✅ DOMContentLoaded - spúšťam scanner');
                 console.log('🔍 DOMContentLoaded - spúšťam scanner');
                 setTimeout(initScanner, 500);
             });
         } else {
             // Malé oneskorenie pre istotu
+            addDebugMsg('✅ DOM už načítaný - spúšťam scanner');
             console.log('🔍 DOM už načítaný - spúšťam scanner');
             setTimeout(initScanner, 500);
         }
         
         // Backup - spustiť aj po window.load
         window.addEventListener('load', function() {
+            addDebugMsg('✅ window.load event - kontrolujem scanner');
             console.log('🔍 window.load event - kontrolujem scanner');
             if (!isScanning) {
+                addDebugMsg('▶️ Scanner nebeží, spúšťam...');
                 console.log('🔍 Scanner nebeží, spúšťam...');
                 setTimeout(initScanner, 1000);
             }
