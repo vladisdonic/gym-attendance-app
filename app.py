@@ -1978,14 +1978,14 @@ def scanner_view(worksheet):
                     addDebugMsg('⏳ Začínam presmerovanie za 500ms...');
                     console.log('Začínam presmerovanie na:', newUrl);
                     
+                    // Presmerovať na tú istú stránku s parametrami (Streamlit ich spracuje)
+                    addDebugMsg('⏳ Začínam presmerovanie za 500ms...');
+                    console.log('Začínam presmerovanie na:', newUrl);
+                    
                     // Malé oneskorenie, aby sa hláška stihla zobraziť
                     setTimeout(() => {
                         addDebugMsg('🚀 Spúšťam presmerovanie...');
                         console.log('Spúšťam presmerovanie...');
-                        console.log('window:', window);
-                        console.log('window.top:', window.top);
-                        console.log('window.parent:', window.parent);
-                        console.log('window.location:', window.location);
                         
                         try {
                             // Skúsiť window.open s _top targetom (funguje aj v iframe)
