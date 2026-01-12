@@ -1893,12 +1893,11 @@ def scanner_view(worksheet):
                     
                     console.log('Extrahované údaje:', { name, membership, time });
                     
-                    // Odoslať údaje na server cez query params (bez presmerovania na inú stránku)
+                    // Odoslať údaje na server cez query params
                     console.log('Vytváram novú URL...');
-                    console.log('window.location.origin:', window.location.origin);
-                    console.log('window.location.pathname:', window.location.pathname);
                     
-                    const baseUrl = window.location.origin + window.location.pathname;
+                    // Použiť absolútnu URL namiesto relatívnej (pre iframe kompatibilitu)
+                    const baseUrl = 'https://giantgym.streamlit.app/';
                     console.log('baseUrl:', baseUrl);
                     
                     const newParams = new URLSearchParams();
@@ -1919,25 +1918,45 @@ def scanner_view(worksheet):
                     // Malé oneskorenie, aby sa hláška stihla zobraziť
                     setTimeout(() => {
                         console.log('Spúšťam presmerovanie...');
+                        console.log('window:', window);
+                        console.log('window.top:', window.top);
+                        console.log('window.parent:', window.parent);
+                        console.log('window.location:', window.location);
+                        
                         try {
-                            const topWindow = window.top || window.parent || window;
-                            console.log('topWindow:', topWindow);
-                            console.log('topWindow !== window:', topWindow !== window);
-                            if (topWindow && topWindow !== window) {
-                                console.log('Používam window.top.location.href');
-                                topWindow.location.href = newUrl;
-                            } else {
-                                console.log('Používam window.location.href');
-                                window.location.href = newUrl;
+                            // Skúsiť najprv window.top (pre iframe)
+                            if (window.top && window.top !== window) {
+                                console.log('Používam window.top.location.replace');
+                                window.top.location.replace(newUrl);
+                            } 
+                            // Potom window.parent
+                            else if (window.parent && window.parent !== window) {
+                                console.log('Používam window.parent.location.replace');
+                                window.parent.location.replace(newUrl);
+                            }
+                            // Nakoniec window.location
+                            else {
+                                console.log('Používam window.location.replace');
+                                window.location.replace(newUrl);
                             }
                             console.log('Presmerovanie dokončené');
                         } catch (e) {
                             console.error('Chyba pri presmerovaní:', e);
                             console.error('Stack trace:', e.stack);
+                            // Fallback - skúsiť window.location.href
                             try {
-                                window.location.href = newUrl;
+                                console.log('Fallback: používam window.location.href');
+                                if (window.top && window.top !== window) {
+                                    window.top.location.href = newUrl;
+                                } else {
+                                    window.location.href = newUrl;
+                                }
                             } catch (e2) {
-                                console.error('Aj window.location.href zlyhal:', e2);
+                                console.error('Aj fallback zlyhal:', e2);
+                                // Posledný pokus - zobraziť chybu
+                                if (resultsDiv) {
+                                    resultsDiv.innerHTML = '<div style="padding: 15px; background-color: #f8d7da; border-radius: 5px; color: #721c24;">❌ Chyba pri presmerovaní. Skús obnoviť stránku a skenovať znova.</div>';
+                                }
                             }
                         }
                     }, 500);
