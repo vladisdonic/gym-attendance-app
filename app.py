@@ -963,7 +963,7 @@ def participant_view(worksheet, query_params=None):
             
         # Zobrazenie vygenerovanej URL pre NFC
         if st.session_state.get('personal_nfc_url') and not st.session_state.get('personal_qr_code'):
-            st.markdown("---")
+        st.markdown("---")
             st.success("✅ **URL pre NFC tag vygenerovaná!**")
             st.markdown("### 🔗 Tvoja osobná URL:")
             st.code(st.session_state['personal_nfc_url'], language="text")
@@ -1935,13 +1935,20 @@ def scanner_view(worksheet):
                 }
                 
                 // Zastaviť skenovanie
+                addDebugMsg('🛑 Zastavujem skenovanie...');
                 if (html5QrcodeScanner) {
-                    html5QrcodeScanner.clear().catch(err => {
+                    html5QrcodeScanner.clear().then(() => {
+                        addDebugMsg('✅ Skenovanie zastavené');
+                    }).catch(err => {
+                        addDebugMsg('❌ Chyba pri zastavení skenovania: ' + err.message);
                         console.error('Chyba pri zastavení skenovania:', err);
                     });
+                } else {
+                    addDebugMsg('⚠️ html5QrcodeScanner nie je dostupný');
                 }
                 
                 // Extrahovať parametre z URL
+                addDebugMsg('🔍 Začínam extrahovanie údajov z URL...');
                 try {
                     addDebugMsg('🔍 Začínam extrahovanie údajov z URL');
                     console.log('Začínam extrahovanie údajov z URL:', decodedText);
