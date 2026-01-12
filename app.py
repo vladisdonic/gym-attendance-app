@@ -1864,6 +1864,22 @@ def scanner_view(worksheet):
             if (isValid) {
                 console.log('✅ Validný QR kód - extrahujem údaje');
                 
+                // Zobraziť úspech OKAMŽITE (pred extrahovaním)
+                const resultsDiv = document.getElementById('qr-reader-results');
+                if (resultsDiv) {
+                    resultsDiv.innerHTML = '<div style="padding: 15px; background-color: #d4edda; border-radius: 5px; color: #155724; font-weight: bold;">✅ QR kód rozpoznaný! Registrujem na pozadí...</div>';
+                    console.log('Hláška zobrazená');
+                } else {
+                    console.error('resultsDiv nie je dostupný!');
+                }
+                
+                // Zastaviť skenovanie
+                if (html5QrcodeScanner) {
+                    html5QrcodeScanner.clear().catch(err => {
+                        console.error('Chyba pri zastavení skenovania:', err);
+                    });
+                }
+                
                 // Extrahovať parametre z URL
                 try {
                     const url = new URL(decodedText);
@@ -1873,17 +1889,6 @@ def scanner_view(worksheet):
                     const time = params.get('time') || '';
                     
                     console.log('Extrahované údaje:', { name, membership, time });
-                    
-                    // Zobraziť úspech
-                    const resultsDiv = document.getElementById('qr-reader-results');
-                    resultsDiv.innerHTML = '<div style="padding: 15px; background-color: #d4edda; border-radius: 5px; color: #155724; font-weight: bold;">✅ QR kód rozpoznaný! Registrujem na pozadí...</div>';
-                    
-                    // Zastaviť skenovanie
-                    if (html5QrcodeScanner) {
-                        html5QrcodeScanner.clear().catch(err => {
-                            console.error('Chyba pri zastavení skenovania:', err);
-                        });
-                    }
                     
                     // Odoslať údaje na server cez query params (bez presmerovania na inú stránku)
                     // Použijeme window.location.search na pridanie parametrov
@@ -1901,17 +1906,29 @@ def scanner_view(worksheet):
                     
                     // Presmerovať na tú istú stránku s parametrami (Streamlit ich spracuje)
                     console.log('Presmerovávam na:', newUrl);
-                    const topWindow = window.top || window.parent || window;
-                    if (topWindow && topWindow !== window) {
-                        topWindow.location.href = newUrl;
-                    } else {
-                        window.location.href = newUrl;
-                    }
+                    
+                    // Malé oneskorenie, aby sa hláška stihla zobraziť
+                    setTimeout(() => {
+                        try {
+                            const topWindow = window.top || window.parent || window;
+                            if (topWindow && topWindow !== window) {
+                                console.log('Používam window.top.location.href');
+                                topWindow.location.href = newUrl;
+                            } else {
+                                console.log('Používam window.location.href');
+                                window.location.href = newUrl;
+                            }
+                        } catch (e) {
+                            console.error('Chyba pri presmerovaní:', e);
+                            window.location.href = newUrl;
+                        }
+                    }, 500);
                     
                 } catch (e) {
                     console.error('Chyba pri extrahovaní údajov z URL:', e);
-                    const resultsDiv = document.getElementById('qr-reader-results');
-                    resultsDiv.innerHTML = '<div style="padding: 15px; background-color: #f8d7da; border-radius: 5px; color: #721c24;">❌ Chyba pri spracovaní QR kódu: ' + e.message + '</div>';
+                    if (resultsDiv) {
+                        resultsDiv.innerHTML = '<div style="padding: 15px; background-color: #f8d7da; border-radius: 5px; color: #721c24;">❌ Chyba pri spracovaní QR kódu: ' + e.message + '</div>';
+                    }
                 }
             } else {
                 // Neplatný QR kód alebo chyba
