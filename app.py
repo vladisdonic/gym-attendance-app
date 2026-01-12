@@ -1789,6 +1789,19 @@ def scanner_view(worksheet):
     4. **Automaticky sa rozpozná a prihlási na pozadí** (zobrazí sa len potvrdenie)
     """)
     
+    # Automaticky spustiť scanner po úspešnom prihlásení
+    if st.session_state.get('restart_scanner_after_success'):
+        st.markdown("""
+        <script>
+        if (window.restartScanner) {
+            setTimeout(function() {
+                window.restartScanner();
+            }, 500);
+        }
+        </script>
+        """, unsafe_allow_html=True)
+        del st.session_state['restart_scanner_after_success']
+    
     # Tlačidlo na manuálne spustenie scanneru
     if st.button("🔄 Spustiť Scanner", key="start_scanner", use_container_width=True, type="primary"):
         st.session_state['restart_scanner'] = True
