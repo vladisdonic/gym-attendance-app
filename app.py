@@ -963,7 +963,7 @@ def participant_view(worksheet, query_params=None):
             
         # Zobrazenie vygenerovanej URL pre NFC
         if st.session_state.get('personal_nfc_url') and not st.session_state.get('personal_qr_code'):
-            st.markdown("---")
+        st.markdown("---")
             st.success("✅ **URL pre NFC tag vygenerovaná!**")
             st.markdown("### 🔗 Tvoja osobná URL:")
             st.code(st.session_state['personal_nfc_url'], language="text")
@@ -2300,6 +2300,23 @@ def scanner_view(worksheet):
 
 def main():
     """Hlavná funkcia aplikácie."""
+    
+    # JavaScript listener pre postMessage z iframe (pre QR scanner)
+    st.markdown("""
+    <script>
+    // Počúvať na správy z iframe (QR scanner)
+    window.addEventListener('message', function(event) {
+        // Bezpečnostná kontrola - skontrolovať origin (voliteľné)
+        // if (event.origin !== 'https://giantgym.streamlit.app') return;
+        
+        if (event.data && event.data.type === 'QR_SCAN_SUCCESS') {
+            console.log('QR scan success message received:', event.data.url);
+            // Presmerovať hlavnú stránku na novú URL
+            window.location.href = event.data.url;
+        }
+    });
+    </script>
+    """, unsafe_allow_html=True)
     
     # CSS na skrytie akéhokoľvek zobrazeného JavaScript kódu
     st.markdown("""
