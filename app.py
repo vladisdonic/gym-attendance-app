@@ -963,7 +963,7 @@ def participant_view(worksheet, query_params=None):
             
         # Zobrazenie vygenerovanej URL pre NFC
         if st.session_state.get('personal_nfc_url') and not st.session_state.get('personal_qr_code'):
-            st.markdown("---")
+        st.markdown("---")
             st.success("✅ **URL pre NFC tag vygenerovaná!**")
             st.markdown("### 🔗 Tvoja osobná URL:")
             st.code(st.session_state['personal_nfc_url'], language="text")
@@ -2003,27 +2003,29 @@ def scanner_view(worksheet):
                     
                     // Malé oneskorenie, aby sa hláška stihla zobraziť
                     setTimeout(() => {
-                        addDebugMsg('🚀 Spúšťam presmerovanie hlavnej stránky...');
-                        console.log('Spúšťam presmerovanie hlavnej stránky...');
+                        addDebugMsg('🚀 Spúšťam presmerovanie cez postMessage...');
+                        console.log('Spúšťam presmerovanie cez postMessage...');
                         
-                        // Presmerovať hlavnú stránku (nie iframe)
+                        // Použiť postMessage API na komunikáciu s hlavnou stránkou
                         try {
-                            if (window.top && window.top !== window) {
-                                // Ak sme v iframe, presmerovať hlavnú stránku
-                                addDebugMsg('🌐 Používam window.top.location.href');
-                                console.log('Používam window.top.location.href');
-                                window.top.location.href = newUrl;
+                            if (window.parent && window.parent !== window) {
+                                // Pošli správu hlavnej stránke
+                                addDebugMsg('📨 Posielam správu hlavnej stránke cez postMessage');
+                                console.log('Posielam správu hlavnej stránke:', newUrl);
+                                window.parent.postMessage({
+                                    type: 'QR_SCAN_SUCCESS',
+                                    url: newUrl
+                                }, '*'); // '*' pre cross-origin komunikáciu
+                                addDebugMsg('✅ Správa odoslaná');
                             } else {
                                 // Ak nie sme v iframe, presmerovať priamo
                                 addDebugMsg('🌐 Používam window.location.href');
                                 console.log('Používam window.location.href');
                                 window.location.href = newUrl;
                             }
-                            addDebugMsg('✅ Presmerovanie dokončené');
-                            console.log('Presmerovanie dokončené');
                         } catch (e) {
-                            addDebugMsg('❌ Chyba pri presmerovaní: ' + e.message);
-                            console.error('Chyba pri presmerovaní:', e);
+                            addDebugMsg('❌ Chyba pri postMessage: ' + e.message);
+                            console.error('Chyba pri postMessage:', e);
                             
                             // Fallback - skúsiť window.open
                             try {
