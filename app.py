@@ -1882,8 +1882,11 @@ def scanner_view(worksheet):
                 
                 // Extrahovať parametre z URL
                 try {
+                    console.log('Začínam extrahovanie údajov z URL:', decodedText);
                     const url = new URL(decodedText);
+                    console.log('URL objekt vytvorený:', url);
                     const params = new URLSearchParams(url.search);
+                    console.log('URLSearchParams vytvorené');
                     const name = params.get('name') || '';
                     const membership = params.get('membership') || '';
                     const time = params.get('time') || '';
@@ -1891,8 +1894,13 @@ def scanner_view(worksheet):
                     console.log('Extrahované údaje:', { name, membership, time });
                     
                     // Odoslať údaje na server cez query params (bez presmerovania na inú stránku)
-                    // Použijeme window.location.search na pridanie parametrov
+                    console.log('Vytváram novú URL...');
+                    console.log('window.location.origin:', window.location.origin);
+                    console.log('window.location.pathname:', window.location.pathname);
+                    
                     const baseUrl = window.location.origin + window.location.pathname;
+                    console.log('baseUrl:', baseUrl);
+                    
                     const newParams = new URLSearchParams();
                     newParams.set('view', 'scanner');
                     newParams.set('qr_name', encodeURIComponent(name));
@@ -1903,14 +1911,18 @@ def scanner_view(worksheet):
                     newParams.set('qr_submit', '1');
                     
                     const newUrl = baseUrl + '?' + newParams.toString();
+                    console.log('Nová URL vytvorená:', newUrl);
                     
                     // Presmerovať na tú istú stránku s parametrami (Streamlit ich spracuje)
-                    console.log('Presmerovávam na:', newUrl);
+                    console.log('Začínam presmerovanie na:', newUrl);
                     
                     // Malé oneskorenie, aby sa hláška stihla zobraziť
                     setTimeout(() => {
+                        console.log('Spúšťam presmerovanie...');
                         try {
                             const topWindow = window.top || window.parent || window;
+                            console.log('topWindow:', topWindow);
+                            console.log('topWindow !== window:', topWindow !== window);
                             if (topWindow && topWindow !== window) {
                                 console.log('Používam window.top.location.href');
                                 topWindow.location.href = newUrl;
@@ -1918,16 +1930,24 @@ def scanner_view(worksheet):
                                 console.log('Používam window.location.href');
                                 window.location.href = newUrl;
                             }
+                            console.log('Presmerovanie dokončené');
                         } catch (e) {
                             console.error('Chyba pri presmerovaní:', e);
-                            window.location.href = newUrl;
+                            console.error('Stack trace:', e.stack);
+                            try {
+                                window.location.href = newUrl;
+                            } catch (e2) {
+                                console.error('Aj window.location.href zlyhal:', e2);
+                            }
                         }
                     }, 500);
                     
                 } catch (e) {
                     console.error('Chyba pri extrahovaní údajov z URL:', e);
+                    console.error('Stack trace:', e.stack);
+                    console.error('decodedText hodnota:', decodedText);
                     if (resultsDiv) {
-                        resultsDiv.innerHTML = '<div style="padding: 15px; background-color: #f8d7da; border-radius: 5px; color: #721c24;">❌ Chyba pri spracovaní QR kódu: ' + e.message + '</div>';
+                        resultsDiv.innerHTML = '<div style="padding: 15px; background-color: #f8d7da; border-radius: 5px; color: #721c24;">❌ Chyba pri spracovaní QR kódu: ' + e.message + '<br><br>Skopíruj túto chybu a pošli ju vývojárovi.</div>';
                     }
                 }
             } else {
