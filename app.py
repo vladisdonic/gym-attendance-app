@@ -732,7 +732,9 @@ def participant_view(worksheet, query_params=None):
                     
                     // Ak sú všetky údaje dostupné, presmeruj s parametrami
                     if (userData.name && userData.membership) {
-                        const baseUrl = window.location.origin + window.location.pathname;
+                        // Použiť window.top pre presmerovanie celej stránky (nie len iframe)
+                        const topWindow = window.top || window.parent || window;
+                        const baseUrl = 'https://giantgym.streamlit.app/';
                         const params = new URLSearchParams({
                             view: 'participant',
                             name: userData.name,
@@ -742,7 +744,13 @@ def participant_view(worksheet, query_params=None):
                         });
                         const newUrl = baseUrl + '?' + params.toString();
                         console.log('NFC Mode - Presmerovanie na:', newUrl);
-                        window.location.href = newUrl;
+                        try {
+                            topWindow.location.href = newUrl;
+                        } catch (e) {
+                            // Ak window.top nie je dostupný (cross-origin), skúsime window.location
+                            console.log('NFC Mode - window.top nie je dostupný, používam window.location');
+                            window.location.href = newUrl;
+                        }
                     } else {
                         console.log('NFC Mode - Údaje chýbajú, pokračujeme normálne');
                     }
@@ -797,9 +805,9 @@ def participant_view(worksheet, query_params=None):
         })();
         </script>
         """
-        # Použijeme markdown s unsafe_allow_html, aby JavaScript bežal v hlavnej stránke (nie v iframe)
-        # Toto je dôležité, aby localStorage/sessionStorage/IndexedDB fungovali správne
-        st.markdown(html_code, unsafe_allow_html=True)
+        # Použijeme components.v1.html - JavaScript beží v iframe
+        # Používame window.top.location na presmerovanie celej stránky
+        st.components.v1.html(html_code, height=0)
         
         # Zobrazíme informáciu - ak JavaScript presmeroval, táto časť sa nezobrazí
         # Ak údaje chýbajú, zobrazíme varovanie a pokračujeme ďalej
