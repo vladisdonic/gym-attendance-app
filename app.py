@@ -1752,25 +1752,19 @@ def scanner_view(worksheet):
                 st.markdown("""
                 <script>
                 setTimeout(function() {
-                    // Vyčistiť query params
+                    // Vyčistiť query params a presmerovať na scanner view
                     const cleanUrl = window.location.pathname + '?view=scanner';
-                    window.history.replaceState({}, '', cleanUrl);
-                    
-                    // Znova spustiť scanner
-                    if (window.restartScanner) {
-                        setTimeout(function() {
-                            window.restartScanner();
-                        }, 500);
+                    if (window.top && window.top !== window) {
+                        window.top.location.href = cleanUrl;
+                    } else {
+                        window.location.href = cleanUrl;
                     }
                 }, 2000);
                 </script>
                 """, unsafe_allow_html=True)
                 
-                # Automaticky rerun po 2 sekundách (pre vyčistenie query params a znova spustenie scanneru)
-                import time
-                time.sleep(2)
-                st.query_params.clear()
-                st.rerun()
+                # Nastaviť flag, že sa má znova spustiť scanner po rerun
+                st.session_state['restart_scanner_after_success'] = True
             else:
                 st.error("❌ Chyba pri prihlásení. Skús znova.")
         else:
