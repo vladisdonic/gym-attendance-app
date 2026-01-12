@@ -1720,8 +1720,54 @@ def trainer_view(worksheet):
         st.info("Zatiaľ sa nikto neprihlásil.")
 
 
-def scanner_view():
+def scanner_view(worksheet):
     """Pohľad pre QR kód scanner v gyme - používa JavaScript na dekódovanie v prehliadači."""
+    # Získať query params
+    query_params = st.query_params
+    
+    # Kontrola, či boli údaje naskenované cez QR kód (query params)
+    qr_submit = query_params.get("qr_submit", "0") == "1"
+    if qr_submit:
+        # Extrahovať údaje z query params
+        name = unquote(query_params.get("qr_name", ""))
+        membership = unquote(query_params.get("qr_membership", ""))
+        time = unquote(query_params.get("qr_time", ""))
+        
+        # Ak čas nie je v údajoch, automaticky vyberieme najbližší
+        if not time:
+            time = get_next_training_time()
+        
+        # Kontrola, či sú údaje validné
+        if name and membership and membership in MEMBERSHIP_TYPES:
+            # Odoslať údaje
+            from datetime import datetime
+            client_timestamp = datetime.now().strftime("%H:%M:%S")
+            
+            if add_attendance(worksheet, name, membership, time, client_timestamp):
+                st.success("🎉 **Úspešne prihlásený/á!**")
+                st.balloons()
+                st.info(f"**Meno:** {name}  \n**Typ členstva:** {membership}  \n**Čas tréningu:** {time}")
+                
+                # Vyčistiť query params (presmerovať bez parametrov)
+                st.markdown("""
+                <script>
+                setTimeout(function() {
+                    const cleanUrl = window.location.pathname + '?view=scanner';
+                    window.history.replaceState({}, '', cleanUrl);
+                }, 100);
+                </script>
+                """, unsafe_allow_html=True)
+                
+                # Zobraziť tlačidlo na nové skenovanie
+                st.markdown("---")
+                if st.button("🔄 Naskenovať ďalší QR kód", use_container_width=True, type="primary"):
+                    st.rerun()
+                return  # Ukončiť renderovanie, aby sa nezobrazil scanner znova
+            else:
+                st.error("❌ Chyba pri prihlásení. Skús znova.")
+        else:
+            st.warning("⚠️ Neplatné údaje v QR kóde.")
+    
     st.title("📷 QR Kód Scanner - Gym")
     st.markdown("**Naskenuj QR kód pre automatické prihlásenie na tréning**")
     
@@ -1730,7 +1776,7 @@ def scanner_view():
     1. **Povol prístup ku kamere** - klikni na ikonu kamery v adresnom riadku a povoľ prístup
     2. Používateľ otvorí svoj QR kód na telefóne
     3. Zameria fotoaparát tabletu/počítača na QR kód
-    4. **Automaticky sa rozpozná a prihlási** (bez potreby stlačiť tlačidlo)
+    4. **Automaticky sa rozpozná a prihlási na pozadí** (zobrazí sa len potvrdenie)
     """)
     
     # Tlačidlo na manuálne spustenie scanneru
@@ -1816,45 +1862,56 @@ def scanner_view():
             console.log('Validácia výsledok:', isValid);
             
             if (isValid) {
-                console.log('✅ Validný QR kód - začínam presmerovanie');
+                console.log('✅ Validný QR kód - extrahujem údaje');
                 
-                // Zobraziť úspech
-                const resultsDiv = document.getElementById('qr-reader-results');
-                resultsDiv.innerHTML = '<div style="padding: 15px; background-color: #d4edda; border-radius: 5px; color: #155724; font-weight: bold;">✅ QR kód rozpoznaný! Presmerovávam...</div>';
-                
-                // Zastaviť skenovanie
-                if (html5QrcodeScanner) {
-                    html5QrcodeScanner.clear().catch(err => {
-                        console.error('Chyba pri zastavení skenovania:', err);
-                    });
-                }
-                
-                // Presmerovať okamžite - použiť window.top pre presmerovanie celej stránky
+                // Extrahovať parametre z URL
                 try {
-                    console.log('Presmerovávam na:', decodedText);
-                    // Skúsiť presmerovať celú stránku (nie len iframe)
+                    const url = new URL(decodedText);
+                    const params = new URLSearchParams(url.search);
+                    const name = params.get('name') || '';
+                    const membership = params.get('membership') || '';
+                    const time = params.get('time') || '';
+                    
+                    console.log('Extrahované údaje:', { name, membership, time });
+                    
+                    // Zobraziť úspech
+                    const resultsDiv = document.getElementById('qr-reader-results');
+                    resultsDiv.innerHTML = '<div style="padding: 15px; background-color: #d4edda; border-radius: 5px; color: #155724; font-weight: bold;">✅ QR kód rozpoznaný! Registrujem na pozadí...</div>';
+                    
+                    // Zastaviť skenovanie
+                    if (html5QrcodeScanner) {
+                        html5QrcodeScanner.clear().catch(err => {
+                            console.error('Chyba pri zastavení skenovania:', err);
+                        });
+                    }
+                    
+                    // Odoslať údaje na server cez query params (bez presmerovania na inú stránku)
+                    // Použijeme window.location.search na pridanie parametrov
+                    const baseUrl = window.location.origin + window.location.pathname;
+                    const newParams = new URLSearchParams();
+                    newParams.set('view', 'scanner');
+                    newParams.set('qr_name', encodeURIComponent(name));
+                    newParams.set('qr_membership', encodeURIComponent(membership));
+                    if (time) {
+                        newParams.set('qr_time', encodeURIComponent(time));
+                    }
+                    newParams.set('qr_submit', '1');
+                    
+                    const newUrl = baseUrl + '?' + newParams.toString();
+                    
+                    // Presmerovať na tú istú stránku s parametrami (Streamlit ich spracuje)
+                    console.log('Presmerovávam na:', newUrl);
                     const topWindow = window.top || window.parent || window;
                     if (topWindow && topWindow !== window) {
-                        console.log('Používam window.top.location.replace');
-                        try {
-                            topWindow.location.replace(decodedText);
-                        } catch (e1) {
-                            console.log('window.top.location.replace zlyhal, skúšam href:', e1);
-                            topWindow.location.href = decodedText;
-                        }
+                        topWindow.location.href = newUrl;
                     } else {
-                        console.log('Používam window.location.replace');
-                        window.location.replace(decodedText);
+                        window.location.href = newUrl;
                     }
+                    
                 } catch (e) {
-                    // Ak window.top nie je dostupný (cross-origin), použiť window.location
-                    console.log('window.top nie je dostupný, používam window.location. Chyba:', e);
-                    try {
-                        window.location.replace(decodedText);
-                    } catch (e2) {
-                        console.log('window.location.replace zlyhal, skúšam href:', e2);
-                        window.location.href = decodedText;
-                    }
+                    console.error('Chyba pri extrahovaní údajov z URL:', e);
+                    const resultsDiv = document.getElementById('qr-reader-results');
+                    resultsDiv.innerHTML = '<div style="padding: 15px; background-color: #f8d7da; border-radius: 5px; color: #721c24;">❌ Chyba pri spracovaní QR kódu: ' + e.message + '</div>';
                 }
             } else {
                 // Neplatný QR kód alebo chyba
@@ -2266,7 +2323,7 @@ def main():
     elif view == "wallet":
         wallet_pass_view()
     elif view == "scanner":
-        scanner_view()
+        scanner_view(worksheet)
     else:
         participant_view(worksheet, query_params)
 
