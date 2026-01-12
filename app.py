@@ -963,7 +963,7 @@ def participant_view(worksheet, query_params=None):
             
         # Zobrazenie vygenerovanej URL pre NFC
         if st.session_state.get('personal_nfc_url') and not st.session_state.get('personal_qr_code'):
-            st.markdown("---")
+        st.markdown("---")
             st.success("✅ **URL pre NFC tag vygenerovaná!**")
             st.markdown("### 🔗 Tvoja osobná URL:")
             st.code(st.session_state['personal_nfc_url'], language="text")
@@ -1988,45 +1988,48 @@ def scanner_view(worksheet):
                         console.log('window.location:', window.location);
                         
                         try {
-                            // Skúsiť najprv window.top (pre iframe)
-                            if (window.top && window.top !== window) {
-                                addDebugMsg('🌐 Používam window.top.location.replace');
-                                console.log('Používam window.top.location.replace');
-                                window.top.location.replace(newUrl);
-                            } 
-                            // Potom window.parent
-                            else if (window.parent && window.parent !== window) {
-                                addDebugMsg('🌐 Používam window.parent.location.replace');
-                                console.log('Používam window.parent.location.replace');
-                                window.parent.location.replace(newUrl);
+                            // Skúsiť window.open s _top targetom (funguje aj v iframe)
+                            addDebugMsg('🌐 Používam window.open s _top targetom');
+                            console.log('Používam window.open s _top targetom');
+                            const opened = window.open(newUrl, '_top');
+                            if (opened) {
+                                addDebugMsg('✅ Presmerovanie dokončené cez window.open');
+                                console.log('Presmerovanie dokončené cez window.open');
+                            } else {
+                                throw new Error('window.open vrátil null');
                             }
-                            // Nakoniec window.location
-                            else {
-                                addDebugMsg('🌐 Používam window.location.replace');
-                                console.log('Používam window.location.replace');
-                                window.location.replace(newUrl);
-                            }
-                            addDebugMsg('✅ Presmerovanie dokončené');
-                            console.log('Presmerovanie dokončené');
                         } catch (e) {
-                            addDebugMsg('❌ Chyba pri presmerovaní: ' + e.message);
-                            console.error('Chyba pri presmerovaní:', e);
-                            console.error('Stack trace:', e.stack);
-                            // Fallback - skúsiť window.location.href
+                            addDebugMsg('❌ Chyba pri presmerovaní cez window.open: ' + e.message);
+                            console.error('Chyba pri presmerovaní cez window.open:', e);
+                            
+                            // Fallback 1 - skúsiť window.top.location.href
                             try {
-                                addDebugMsg('🔄 Fallback: používam window.location.href');
-                                console.log('Fallback: používam window.location.href');
+                                addDebugMsg('🔄 Fallback 1: používam window.top.location.href');
+                                console.log('Fallback 1: používam window.top.location.href');
                                 if (window.top && window.top !== window) {
                                     window.top.location.href = newUrl;
+                                    addDebugMsg('✅ Presmerovanie cez window.top.location.href');
                                 } else {
-                                    window.location.href = newUrl;
+                                    throw new Error('window.top nie je dostupný');
                                 }
                             } catch (e2) {
-                                addDebugMsg('❌ Aj fallback zlyhal: ' + e2.message);
-                                console.error('Aj fallback zlyhal:', e2);
-                                // Posledný pokus - zobraziť chybu
-                                if (resultsDiv) {
-                                    resultsDiv.innerHTML = '<div style="padding: 15px; background-color: #f8d7da; border-radius: 5px; color: #721c24;">❌ Chyba pri presmerovaní. Skús obnoviť stránku a skenovať znova.</div>';
+                                addDebugMsg('❌ Fallback 1 zlyhal: ' + e2.message);
+                                console.error('Fallback 1 zlyhal:', e2);
+                                
+                                // Fallback 2 - skúsiť window.location.href
+                                try {
+                                    addDebugMsg('🔄 Fallback 2: používam window.location.href');
+                                    console.log('Fallback 2: používam window.location.href');
+                                    window.location.href = newUrl;
+                                    addDebugMsg('✅ Presmerovanie cez window.location.href');
+                                } catch (e3) {
+                                    addDebugMsg('❌ Aj fallback 2 zlyhal: ' + e3.message);
+                                    console.error('Aj fallback 2 zlyhal:', e3);
+                                    
+                                    // Posledný pokus - zobraziť chybu a link
+                                    if (resultsDiv) {
+                                        resultsDiv.innerHTML = '<div style="padding: 15px; background-color: #f8d7da; border-radius: 5px; color: #721c24;">❌ Chyba pri presmerovaní. <a href="' + newUrl + '" target="_top" style="color: #721c24; text-decoration: underline;">Klikni tu pre manuálne presmerovanie</a></div>';
+                                    }
                                 }
                             }
                         }
