@@ -1720,6 +1720,80 @@ def trainer_view(worksheet):
         st.info("Zatiaľ sa nikto neprihlásil.")
 
 
+def scanner_view():
+    """Pohľad pre QR kód scanner v gyme."""
+    st.title("📷 QR Kód Scanner - Gym")
+    st.markdown("**Naskenuj QR kód pre automatické prihlásenie na tréning**")
+    
+    st.info("""
+    **Ako to funguje:**
+    1. Používateľ otvorí svoj QR kód na telefóne
+    2. Zameria fotoaparát tabletu/počítača na QR kód
+    3. Automaticky sa načíta URL a prihlási používateľa
+    """)
+    
+    # Upload obrázka z kamery
+    uploaded_file = st.camera_input("Naskenuj QR kód", key="qr_scanner")
+    
+    if uploaded_file is not None:
+        try:
+            from pyzbar import pyzbar
+            from PIL import Image
+            import numpy as np
+            
+            # Načítanie obrázka
+            image = Image.open(uploaded_file)
+            
+            # Konverzia na numpy array
+            img_array = np.array(image)
+            
+            # Dekódovanie QR kódu
+            decoded_objects = pyzbar.decode(img_array)
+            
+            if decoded_objects:
+                qr_data = decoded_objects[0].data.decode('utf-8')
+                
+                st.success("✅ QR kód naskenovaný!")
+                st.info(f"**URL:** {qr_data}")
+                
+                # Kontrola validity
+                if 'giantgym.streamlit.app' in qr_data and 'view=participant' in qr_data:
+                    st.balloons()
+                    st.markdown(f"""
+                    <script>
+                    setTimeout(function() {{
+                        window.location.href = '{qr_data}';
+                    }}, 1000);
+                    </script>
+                    """, unsafe_allow_html=True)
+                else:
+                    st.warning("⚠️ Tento QR kód nie je pre túto aplikáciu.")
+            else:
+                st.warning("⚠️ QR kód sa nepodarilo rozpoznať. Skús znova.")
+                
+        except ImportError as e:
+            st.error(f"""
+            ❌ **Chýba knižnica: {e}**
+            
+            Nainštaluj ju:
+            ```bash
+            pip install pyzbar numpy
+            ```
+            
+            **Pre Linux:**
+            ```bash
+            sudo apt-get install libzbar0
+            ```
+            
+            **Pre macOS:**
+            ```bash
+            brew install zbar
+            ```
+            """)
+        except Exception as e:
+            st.error(f"❌ Chyba pri dekódovaní QR kódu: {e}")
+
+
 def main():
     """Hlavná funkcia aplikácie."""
     
@@ -1921,14 +1995,20 @@ def main():
         - Tréner: `https://giantgym.streamlit.app/?view=trainer`
         - Štatistiky: `https://giantgym.streamlit.app/?view=statistics`
         
-        **NFC čip v gyme (nový spôsob):**
+        **QR kód scanner v gyme:**
+        
+        `https://giantgym.streamlit.app/?view=scanner`
+        
+        Pre použitie v gyme:
+        - Otvor na tablete/počítači s kamerou
+        - Používateľ ukáže svoj QR kód (vygenerovaný v aplikácii)
+        - Automaticky sa načíta URL a prihlási používateľa
+        
+        **NFC čip v gyme (DEPRECATED - nefunguje kvôli cross-origin obmedzeniu):**
         
         `https://giantgym.streamlit.app/?view=participant&nfc=1`
         
-        Po naskenovaní automaticky:
-        - Načíta údaje z telefónu (IndexedDB/cookies/localStorage)
-        - Vyberie najbližší tréning podľa aktuálneho času
-        - Automaticky prihlási
+        ⚠️ Toto riešenie nefunguje - použite QR kód scanner namiesto toho.
         
         **Unikátne URL pre automatické prihlásenie (pôvodný spôsob):**
         
@@ -1951,6 +2031,8 @@ def main():
         statistics_view(client, spreadsheet_id)
     elif view == "wallet":
         wallet_pass_view()
+    elif view == "scanner":
+        scanner_view()
     else:
         participant_view(worksheet, query_params)
 
