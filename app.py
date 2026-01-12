@@ -963,7 +963,7 @@ def participant_view(worksheet, query_params=None):
             
         # Zobrazenie vygenerovanej URL pre NFC
         if st.session_state.get('personal_nfc_url') and not st.session_state.get('personal_qr_code'):
-            st.markdown("---")
+        st.markdown("---")
             st.success("✅ **URL pre NFC tag vygenerovaná!**")
             st.markdown("### 🔗 Tvoja osobná URL:")
             st.code(st.session_state['personal_nfc_url'], language="text")
@@ -1749,15 +1749,30 @@ def scanner_view(worksheet):
                 st.balloons()
                 
                 # Automaticky vyčistiť query params a znova spustiť scanner po 2 sekundách
+                # Namiesto presmerovania len vyčistíme query params a znova spustíme scanner
                 st.markdown("""
                 <script>
                 setTimeout(function() {
-                    // Vyčistiť query params a presmerovať na scanner view
-                    const cleanUrl = window.location.pathname + '?view=scanner';
-                    window.location.href = cleanUrl;
+                    // Vyčistiť query params cez history API (bez presmerovania)
+                    if (window.top && window.top !== window) {
+                        // Ak sme v iframe, presmerovať hlavnú stránku
+                        window.top.location.href = window.top.location.pathname + '?view=scanner';
+                    } else {
+                        // Ak nie sme v iframe, len vyčistiť query params
+                        window.history.replaceState({}, '', window.location.pathname + '?view=scanner');
+                        // Znova spustiť scanner
+                        if (window.restartScanner) {
+                            setTimeout(function() {
+                                window.restartScanner();
+                            }, 500);
+                        }
+                    }
                 }, 2000);
                 </script>
                 """, unsafe_allow_html=True)
+                
+                # Nastaviť flag, že sa má znova spustiť scanner po rerun
+                st.session_state['restart_scanner_after_success'] = True
             else:
                 st.error("❌ Chyba pri prihlásení. Skús znova.")
         else:
@@ -1969,43 +1984,47 @@ def scanner_view(worksheet):
                     addDebugMsg('🔗 Nová URL vytvorená: ' + newUrl);
                     console.log('Nová URL vytvorená:', newUrl);
                     
-                    // Presmerovať na tú istú stránku s parametrami (Streamlit ich spracuje)
-                    addDebugMsg('⏳ Začínam presmerovanie za 500ms...');
-                    console.log('Začínam presmerovanie na:', newUrl);
-                    
-                    // Presmerovať na tú istú stránku s parametrami (Streamlit ich spracuje)
-                    addDebugMsg('⏳ Začínam presmerovanie za 500ms...');
+                    // Presmerovať hlavnú stránku (nie iframe) na novú URL
+                    addDebugMsg('⏳ Začínam presmerovanie hlavnej stránky za 500ms...');
                     console.log('Začínam presmerovanie na:', newUrl);
                     
                     // Malé oneskorenie, aby sa hláška stihla zobraziť
                     setTimeout(() => {
-                        addDebugMsg('🚀 Spúšťam presmerovanie...');
-                        console.log('Spúšťam presmerovanie...');
+                        addDebugMsg('🚀 Spúšťam presmerovanie hlavnej stránky...');
+                        console.log('Spúšťam presmerovanie hlavnej stránky...');
                         
-                        // Keďže už nie sme v iframe, môžeme použiť priamo window.location
+                        // Presmerovať hlavnú stránku (nie iframe)
                         try {
-                            addDebugMsg('🌐 Používam window.location.href');
-                            console.log('Používam window.location.href');
-                            window.location.href = newUrl;
+                            if (window.top && window.top !== window) {
+                                // Ak sme v iframe, presmerovať hlavnú stránku
+                                addDebugMsg('🌐 Používam window.top.location.href');
+                                console.log('Používam window.top.location.href');
+                                window.top.location.href = newUrl;
+                            } else {
+                                // Ak nie sme v iframe, presmerovať priamo
+                                addDebugMsg('🌐 Používam window.location.href');
+                                console.log('Používam window.location.href');
+                                window.location.href = newUrl;
+                            }
                             addDebugMsg('✅ Presmerovanie dokončené');
                             console.log('Presmerovanie dokončené');
                         } catch (e) {
                             addDebugMsg('❌ Chyba pri presmerovaní: ' + e.message);
                             console.error('Chyba pri presmerovaní:', e);
                             
-                            // Fallback - skúsiť window.location.replace
+                            // Fallback - skúsiť window.open
                             try {
-                                addDebugMsg('🔄 Fallback: používam window.location.replace');
-                                console.log('Fallback: používam window.location.replace');
-                                window.location.replace(newUrl);
-                                addDebugMsg('✅ Presmerovanie cez window.location.replace');
+                                addDebugMsg('🔄 Fallback: používam window.open');
+                                console.log('Fallback: používam window.open');
+                                window.open(newUrl, '_top');
+                                addDebugMsg('✅ Presmerovanie cez window.open');
                             } catch (e2) {
                                 addDebugMsg('❌ Aj fallback zlyhal: ' + e2.message);
                                 console.error('Aj fallback zlyhal:', e2);
                                 
                                 // Posledný pokus - zobraziť chybu a link
                                 if (resultsDiv) {
-                                    resultsDiv.innerHTML = '<div style="padding: 15px; background-color: #f8d7da; border-radius: 5px; color: #721c24;">❌ Chyba pri presmerovaní. <a href="' + newUrl + '" style="color: #721c24; text-decoration: underline;">Klikni tu pre manuálne presmerovanie</a></div>';
+                                    resultsDiv.innerHTML = '<div style="padding: 15px; background-color: #f8d7da; border-radius: 5px; color: #721c24;">❌ Chyba pri presmerovaní. <a href="' + newUrl + '" target="_top" style="color: #721c24; text-decoration: underline;">Klikni tu pre manuálne presmerovanie</a></div>';
                                 }
                             }
                         }
