@@ -1804,15 +1804,25 @@ def scanner_view(worksheet):
     
     <script src="https://unpkg.com/html5-qrcode@2.3.8/html5-qrcode.min.js"></script>
     <script>
+    console.log('🔍 QR Scanner Script sa začal načítavať...');
+    console.log('🔍 document.readyState:', document.readyState);
+    console.log('🔍 window.location:', window.location.href);
+    
     // Skontrolovať, či sa knižnica načítala
-    if (typeof Html5Qrcode === 'undefined') {
-        console.error('❌ Html5Qrcode knižnica sa nenačítala!');
-        document.getElementById('qr-reader-results').innerHTML = '<div style="padding: 15px; background-color: #f8d7da; border-radius: 5px; color: #721c24;">❌ Chyba: QR scanner knižnica sa nenačítala. Skús obnoviť stránku.</div>';
-    } else {
-        console.log('✅ Html5Qrcode knižnica sa načítala');
-    }
+    setTimeout(function() {
+        if (typeof Html5Qrcode === 'undefined') {
+            console.error('❌ Html5Qrcode knižnica sa nenačítala!');
+            const resultsDiv = document.getElementById('qr-reader-results');
+            if (resultsDiv) {
+                resultsDiv.innerHTML = '<div style="padding: 15px; background-color: #f8d7da; border-radius: 5px; color: #721c24;">❌ Chyba: QR scanner knižnica sa nenačítala. Skús obnoviť stránku.</div>';
+            }
+        } else {
+            console.log('✅ Html5Qrcode knižnica sa načítala');
+        }
+    }, 1000);
     
     (function() {
+        console.log('🔍 QR Scanner IIFE sa spúšťa...');
         let html5QrcodeScanner = null;
         let isScanning = false;
         let lastScannedCode = null;
@@ -1999,11 +2009,20 @@ def scanner_view(worksheet):
         }
         
         async function startScanner() {
+            console.log('🔍 startScanner volaná');
+            console.log('🔍 isScanning:', isScanning);
+            
             if (isScanning) {
+                console.log('🔍 Scanner už beží, preskakujem');
                 return;
             }
             
             const resultsDiv = document.getElementById('qr-reader-results');
+            console.log('🔍 resultsDiv:', resultsDiv);
+            
+            if (!resultsDiv) {
+                console.error('🔍 resultsDiv nie je dostupný!');
+            }
             
             // Skúsiť najprv zadnú kameru (environment), potom prednú (user)
             const cameraConfigs = [
@@ -2110,21 +2129,47 @@ def scanner_view(worksheet):
         };
         
         // Debug - zobraziť, že JavaScript sa načítal
-        console.log('QR Scanner JavaScript sa načítal');
-        console.log('Html5Qrcode dostupný:', typeof Html5Qrcode !== 'undefined');
-        console.log('qr-reader element:', document.getElementById('qr-reader'));
+        console.log('🔍 QR Scanner JavaScript sa načítal');
+        console.log('🔍 Html5Qrcode dostupný:', typeof Html5Qrcode !== 'undefined');
+        console.log('🔍 qr-reader element:', document.getElementById('qr-reader'));
+        console.log('🔍 qr-reader-results element:', document.getElementById('qr-reader-results'));
+        console.log('🔍 window:', window);
+        console.log('🔍 window.top:', window.top);
+        console.log('🔍 window.parent:', window.parent);
         
         // Spustiť scanner po načítaní stránky
+        function initScanner() {
+            console.log('🔍 initScanner volaná');
+            console.log('🔍 document.readyState:', document.readyState);
+            console.log('🔍 isScanning:', isScanning);
+            if (!isScanning) {
+                console.log('🔍 Volám startScanner...');
+                startScanner();
+            } else {
+                console.log('🔍 Scanner už beží, preskakujem');
+            }
+        }
+        
         if (document.readyState === 'loading') {
+            console.log('🔍 DOM sa ešte načítava, čakám na DOMContentLoaded');
             document.addEventListener('DOMContentLoaded', function() {
-                console.log('DOMContentLoaded - spúšťam scanner');
-                setTimeout(startScanner, 500);
+                console.log('🔍 DOMContentLoaded - spúšťam scanner');
+                setTimeout(initScanner, 500);
             });
         } else {
             // Malé oneskorenie pre istotu
-            console.log('DOM už načítaný - spúšťam scanner');
-            setTimeout(startScanner, 500);
+            console.log('🔍 DOM už načítaný - spúšťam scanner');
+            setTimeout(initScanner, 500);
         }
+        
+        // Backup - spustiť aj po window.load
+        window.addEventListener('load', function() {
+            console.log('🔍 window.load event - kontrolujem scanner');
+            if (!isScanning) {
+                console.log('🔍 Scanner nebeží, spúšťam...');
+                setTimeout(initScanner, 1000);
+            }
+        });
         
         // Cleanup pri opustení stránky
         window.addEventListener('beforeunload', () => {
