@@ -1804,9 +1804,24 @@ def scanner_view(worksheet):
     
     <script src="https://unpkg.com/html5-qrcode@2.3.8/html5-qrcode.min.js"></script>
     <script>
-    console.log('🔍 QR Scanner Script sa začal načítavať...');
-    console.log('🔍 document.readyState:', document.readyState);
-    console.log('🔍 window.location:', window.location.href);
+    // Debug - zobraziť alert, aby sme videli, či sa JavaScript spúšťa
+    try {
+        console.log('🔍 QR Scanner Script sa začal načítavať...');
+        console.log('🔍 document.readyState:', document.readyState);
+        console.log('🔍 window.location:', window.location.href);
+        
+        // Zobraziť aj v DOM, aby sme videli, či sa JavaScript spúšťa
+        const debugDiv = document.createElement('div');
+        debugDiv.id = 'qr-scanner-debug';
+        debugDiv.style.cssText = 'padding: 10px; background: #f0f0f0; border: 1px solid #ccc; margin: 10px 0; font-family: monospace; font-size: 12px;';
+        debugDiv.innerHTML = '🔍 QR Scanner Script sa začal načítavať...<br>document.readyState: ' + document.readyState + '<br>window.location: ' + window.location.href;
+        const resultsDiv = document.getElementById('qr-reader-results');
+        if (resultsDiv && resultsDiv.parentNode) {
+            resultsDiv.parentNode.insertBefore(debugDiv, resultsDiv);
+        }
+    } catch (e) {
+        console.error('Chyba pri inicializácii debug:', e);
+    }
     
     // Skontrolovať, či sa knižnica načítala
     setTimeout(function() {
