@@ -749,7 +749,7 @@ def participant_view(worksheet, query_params=None):
                         } catch (e) {
                             // Ak window.top nie je dostupný (cross-origin), skúsime window.location
                             console.log('NFC Mode - window.top nie je dostupný, používam window.location');
-                            window.location.href = newUrl;
+                        window.location.href = newUrl;
                         }
                     } else {
                         console.log('NFC Mode - Údaje chýbajú, pokračujeme normálne');
@@ -1113,7 +1113,7 @@ def participant_view(worksheet, query_params=None):
     # JavaScript na uloženie údajov do localStorage/sessionStorage/IndexedDB/cookies (spustí sa po rerun)
     if 'save_to_localstorage' in st.session_state:
         save_data = st.session_state['save_to_localstorage']
-        st.markdown(f"""
+        save_html_code = f"""
         <script>
         (async function() {{
             const DB_NAME = 'GiantGymDB';
@@ -1260,7 +1260,9 @@ def participant_view(worksheet, query_params=None):
             }}
         }})();
         </script>
-        """, unsafe_allow_html=True)
+        """
+        # Použijeme components.v1.html namiesto markdown, aby sa JavaScript spustil
+        st.components.v1.html(save_html_code, height=0)
         
         # Odstránime flag z session state, aby sa JavaScript nespustil znova
         del st.session_state['save_to_localstorage']
