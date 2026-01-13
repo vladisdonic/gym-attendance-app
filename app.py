@@ -963,7 +963,7 @@ def participant_view(worksheet, query_params=None):
             
         # Zobrazenie vygenerovanej URL pre NFC
         if st.session_state.get('personal_nfc_url') and not st.session_state.get('personal_qr_code'):
-            st.markdown("---")
+        st.markdown("---")
             st.success("✅ **URL pre NFC tag vygenerovaná!**")
             st.markdown("### 🔗 Tvoja osobná URL:")
             st.code(st.session_state['personal_nfc_url'], language="text")
@@ -1721,60 +1721,65 @@ def trainer_view(worksheet):
 
 
 def scanner_view(worksheet):
-    """Pohľad pre QR kód scanner v gyme - používa JavaScript na dekódovanie v prehliadači."""
-    
-    # Kontrola, či boli údaje naskenované cez QR kód (session state)
-    if st.session_state.get('qr_scanned_data'):
-        scanned_data = st.session_state['qr_scanned_data']
-        name = scanned_data.get('name', '')
-        membership = scanned_data.get('membership', '')
-        time = scanned_data.get('time', '')
-        
-        # Ak čas nie je v údajoch, automaticky vyberieme najbližší
-        if not time:
-            time = get_next_training_time()
-        
-        # Kontrola, či sú údaje validné
-        if name and membership and membership in MEMBERSHIP_TYPES:
-            # Odoslať údaje
-            from datetime import datetime
-            client_timestamp = datetime.now().strftime("%H:%M:%S")
-            
-            if add_attendance(worksheet, name, membership, time, client_timestamp):
-                # Zobraziť len úspešnú hlášku
-                st.success(f"🎉 **{name}** úspešne prihlásený/á na tréning **{time}**!")
-                st.balloons()
-                
-                # Vyčistiť session state a znova spustiť scanner
-                del st.session_state['qr_scanned_data']
-                st.session_state['restart_scanner_after_success'] = True
-                
-                # Rerun po 2 sekundách
-                st.markdown("""
-                <script>
-                setTimeout(function() {
-                    if (window.restartScanner) {
-                        window.restartScanner();
-                    }
-                }, 2000);
-                </script>
-                """, unsafe_allow_html=True)
-            else:
-                st.error("❌ Chyba pri prihlásení. Skús znova.")
-                del st.session_state['qr_scanned_data']
-        else:
-            st.warning("⚠️ Neplatné údaje v QR kóde.")
-            del st.session_state['qr_scanned_data']
+    """Pohľad pre QR kód scanner v gyme - scanner + formulár."""
     
     st.title("📷 QR Kód Scanner - Gym")
-    st.markdown("**Naskenuj QR kód pre automatické prihlásenie na tréning**")
+    st.markdown("**Naskenuj QR kód alebo vyplň formulár manuálne**")
     
+    # Spracovať údaje z query params (ak prídu cez postMessage a reload)
+    query_params = st.query_params
+    qr_submit = query_params.get("qr_submit", "0") == "1"
+    if qr_submit and not st.session_state.get('qr_scanned_data'):
+        # Extrahovať údaje z query params a uložiť do session state
+        name = unquote(query_params.get("qr_name", ""))
+        membership = unquote(query_params.get("qr_membership", ""))
+        time = unquote(query_params.get("qr_time", ""))
+        
+        if name and membership:
+            st.session_state['qr_scanned_data'] = {
+                'name': name,
+                'membership': membership,
+                'time': time
+            }
+            # Vyčistiť query params
+            st.query_params.clear()
+            st.rerun()
+    
+    # Načítať naskenované údaje (ak existujú)
+    scanned_data = st.session_state.get('qr_scanned_data', {})
+    default_name = scanned_data.get('name', '')
+    default_membership = scanned_data.get('membership', '')
+    default_time = scanned_data.get('time', '')
+    
+    # Ak čas nie je v údajoch, automaticky vyberieme najbližší
+    if not default_time:
+        default_time = get_next_training_time()
+    
+    # Nájsť indexy pre selectboxy
+    default_membership_index = 0
+    if default_membership:
+        try:
+            default_membership_index = MEMBERSHIP_TYPES.index(default_membership)
+        except ValueError:
+            default_membership_index = 1  # Predvolená: Mesačné členstvo
+    
+    default_time_index = 0
+    if default_time:
+        try:
+            default_time_index = TRAINING_TIMES.index(default_time)
+        except ValueError:
+            default_time_index = 0
+    
+    st.markdown("---")
+    
+    # Sekcia 1: QR Scanner
+    st.markdown("### 📷 QR Kód Scanner")
     st.info("""
     **Ako to funguje:**
     1. **Povol prístup ku kamere** - klikni na ikonu kamery v adresnom riadku a povoľ prístup
     2. Používateľ otvorí svoj QR kód na telefóne
     3. Zameria fotoaparát tabletu/počítača na QR kód
-    4. **Automaticky sa rozpozná a prihlási na pozadí** (zobrazí sa len potvrdenie)
+    4. **Automaticky sa vyplní formulár nižšie**
     """)
     
     # JavaScript listener pre postMessage z iframe (pre QR scanner) - musí byť aj tu
@@ -1866,6 +1871,129 @@ def scanner_view(worksheet):
         </script>
         """, unsafe_allow_html=True)
         del st.session_state['restart_scanner']
+    
+    st.markdown("---")
+    
+    # Sekcia 2: Formulár na prihlásenie
+    st.markdown("### 📝 Formulár na prihlásenie")
+    
+    # Zobraziť hlášku, ak boli údaje naskenované
+    if scanned_data:
+        st.success("✅ **QR kód naskenovaný!** Formulár je automaticky vyplnený.")
+    
+    # Formulár na prihlásenie
+    with st.form("scanner_attendance_form", clear_on_submit=True):
+        name = st.text_input(
+            "Meno a priezvisko *",
+            value=default_name,
+            placeholder="Zadaj meno alebo naskenuj QR kód...",
+            key="scanner_name_input"
+        )
+        
+        membership = st.selectbox(
+            "Typ členstva *",
+            options=MEMBERSHIP_TYPES,
+            index=default_membership_index,
+            key="scanner_membership_select"
+        )
+        
+        training_time = st.selectbox(
+            "Čas tréningu *",
+            options=TRAINING_TIMES,
+            index=default_time_index,
+            key="scanner_time_select"
+        )
+        
+        # Honeypot pole
+        st.markdown("""
+        <style>
+        div[data-testid="stTextInput"]:has(input[aria-label*="website"]) {
+            display: none !important;
+            visibility: hidden !important;
+            height: 0 !important;
+            width: 0 !important;
+            position: absolute !important;
+            left: -9999px !important;
+            opacity: 0 !important;
+            pointer-events: none !important;
+        }
+        </style>
+        """, unsafe_allow_html=True)
+        
+        honeypot = st.text_input(
+            "website",
+            key="scanner_honeypot",
+            label_visibility="collapsed",
+            help=""
+        )
+        
+        # Hidden field pre čas klienta
+        client_time = st.text_input(
+            "client_time",
+            key="scanner_client_time",
+            label_visibility="collapsed",
+            help="",
+            value=""
+        )
+        
+        # JavaScript na nastavenie času klienta
+        st.markdown("""
+        <script>
+        (function() {
+            const now = new Date();
+            const hours = String(now.getHours()).padStart(2, '0');
+            const minutes = String(now.getMinutes()).padStart(2, '0');
+            const seconds = String(now.getSeconds()).padStart(2, '0');
+            const timeString = hours + ':' + minutes + ':' + seconds;
+            
+            const clientTimeInput = document.querySelector('input[aria-label*="client_time"]');
+            if (clientTimeInput) {
+                clientTimeInput.value = timeString;
+            }
+        })();
+        </script>
+        """, unsafe_allow_html=True)
+        
+        submitted = st.form_submit_button(
+            "✅ Prihlásiť na tréning",
+            use_container_width=True,
+            type="primary"
+        )
+        
+        if submitted:
+            # Kontrola honeypot poľa
+            if honeypot and honeypot.strip():
+                st.error("⚠️ Bot detekovaný. Prihlásenie bolo zamietnuté.")
+            elif not name.strip():
+                st.warning("⚠️ Prosím, zadaj meno alebo naskenuj QR kód.")
+            elif not membership:
+                st.warning("⚠️ Prosím, vyber typ členstva.")
+            elif not training_time:
+                st.warning("⚠️ Prosím, vyber čas tréningu.")
+            else:
+                # Získať čas klienta
+                client_timestamp = client_time if client_time else None
+                if add_attendance(worksheet, name.strip(), membership, training_time, client_timestamp):
+                    st.success(f"🎉 **{name.strip()}** úspešne prihlásený/á na tréning **{training_time}**!")
+                    st.balloons()
+                    
+                    # Vyčistiť session state a znova spustiť scanner
+                    if 'qr_scanned_data' in st.session_state:
+                        del st.session_state['qr_scanned_data']
+                    st.session_state['restart_scanner_after_success'] = True
+                    
+                    # Rerun po 2 sekundách
+                    st.markdown("""
+                    <script>
+                    setTimeout(function() {
+                        if (window.restartScanner) {
+                            window.restartScanner();
+                        }
+                    }, 2000);
+                    </script>
+                    """, unsafe_allow_html=True)
+                else:
+                    st.error("❌ Chyba pri prihlásení. Skús znova.")
     
     # JavaScript riešenie s html5-qrcode knižnicou
     scanner_html = """
