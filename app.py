@@ -963,7 +963,7 @@ def participant_view(worksheet, query_params=None):
             
         # Zobrazenie vygenerovanej URL pre NFC
         if st.session_state.get('personal_nfc_url') and not st.session_state.get('personal_qr_code'):
-            st.markdown("---")
+        st.markdown("---")
             st.success("✅ **URL pre NFC tag vygenerovaná!**")
             st.markdown("### 🔗 Tvoja osobná URL:")
             st.code(st.session_state['personal_nfc_url'], language="text")
@@ -2035,30 +2035,6 @@ def scanner_view(worksheet):
                     const newUrl = baseUrl + '?' + newParams.toString();
                     addDebugMsg('🔗 Nová URL vytvorená: ' + newUrl);
                     console.log('Nová URL vytvorená:', newUrl);
-                    
-                    // Zastaviť skenovanie OKAMŽITE (pred presmerovaním)
-                    // Musíme najprv zastaviť scanner pomocou stop(), potom clear()
-                    addDebugMsg('🛑 Zastavujem skenovanie OKAMŽITE...');
-                    if (html5QrcodeScanner) {
-                        // Najprv zastaviť scanner
-                        html5QrcodeScanner.stop().then(() => {
-                            addDebugMsg('✅ Scanner zastavený (stop)');
-                            // Potom vyčistiť
-                            return html5QrcodeScanner.clear();
-                        }).then(() => {
-                            addDebugMsg('✅ Scanner vyčistený (clear)');
-                            isScanning = false;
-                            html5QrcodeScanner = null;
-                        }).catch(err => {
-                            addDebugMsg('❌ Chyba pri zastavení skenovania: ' + (err.message || err.toString()));
-                            console.error('Chyba pri zastavení skenovania:', err);
-                            isScanning = false;
-                            html5QrcodeScanner = null;
-                        });
-                    } else {
-                        addDebugMsg('⚠️ html5QrcodeScanner nie je dostupný');
-                        isScanning = false;
-                    }
                     
                     // Presmerovať hlavnú stránku (nie iframe) na novú URL
                     addDebugMsg('⏳ Začínam presmerovanie hlavnej stránky za 500ms...');
