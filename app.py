@@ -1877,49 +1877,6 @@ def scanner_view(worksheet):
     # Zobraziť scanner HTML (PRED formulárom)
     # JavaScript riešenie s html5-qrcode knižnicou
     scanner_html = """
-    
-    # Zobraziť hlášku, ak boli údaje naskenované
-    if scanned_data:
-        st.success("✅ **QR kód naskenovaný!** Formulár je automaticky vyplnený.")
-    
-    # Formulár na prihlásenie
-    with st.form("scanner_attendance_form", clear_on_submit=True):
-        name = st.text_input(
-            "Meno a priezvisko *",
-            value=default_name,
-            placeholder="Zadaj meno alebo naskenuj QR kód...",
-            key="scanner_name_input"
-        )
-        
-        membership = st.selectbox(
-            "Typ členstva *",
-            options=MEMBERSHIP_TYPES,
-            index=default_membership_index,
-            key="scanner_membership_select"
-        )
-        
-        training_time = st.selectbox(
-            "Čas tréningu *",
-            options=TRAINING_TIMES,
-            index=default_time_index,
-            key="scanner_time_select"
-        )
-        
-        # Honeypot pole
-        st.markdown("""
-        <style>
-        div[data-testid="stTextInput"]:has(input[aria-label*="website"]) {
-            display: none !important;
-            visibility: hidden !important;
-            height: 0 !important;
-            width: 0 !important;
-            position: absolute !important;
-            left: -9999px !important;
-            opacity: 0 !important;
-            pointer-events: none !important;
-        }
-        </style>
-        """, unsafe_allow_html=True)
         
         honeypot = st.text_input(
             "website",
