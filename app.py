@@ -2030,6 +2030,10 @@ def scanner_view(worksheet):
             startScanner();
         }
         
+        function debug(msg) {
+            console.log('[QR Scanner]', msg);
+        }
+        
         async function startScanner() {
             if (isScanning) return;
             
