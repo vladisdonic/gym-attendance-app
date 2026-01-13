@@ -1975,13 +1975,37 @@ def scanner_view(worksheet):
                     
                     const container = document.getElementById('qr-scanner-container');
                     const linkDiv = document.createElement('div');
-                    linkDiv.innerHTML = '<div style="margin-top: 20px; padding: 20px; background: linear-gradient(135deg, #e8f5e9 0%, #c8e6c9 100%); border-radius: 12px; text-align: center; border: 2px solid #4caf50;">' +
-                        '<p style="margin: 0 0 15px 0; font-size: 16px; color: #2e7d32;"><strong>✅ QR kód bol naskenovaný!</strong></p>' +
-                        '<p style="margin: 0 0 15px 0; color: #388e3c;">' + name + ' • ' + membership + '</p>' +
-                        '<p style="margin: 0 0 10px 0; font-size: 12px; color: #666;">Skopíruj túto URL a vlož ju do adresného riadku:</p>' +
-                        '<input type="text" value="' + redirectUrl + '" readonly onclick="this.select(); document.execCommand(\'copy\');" style="width: 100%; padding: 10px; border: 1px solid #ccc; border-radius: 4px; font-size: 11px; margin-bottom: 15px; cursor: pointer;" title="Klikni pre skopírovanie">' +
-                        '<br><a href="' + redirectUrl + '" target="_blank" style="display: inline-block; padding: 15px 30px; background: linear-gradient(135deg, #4caf50 0%, #45a049 100%); color: white; text-decoration: none; border-radius: 8px; font-weight: bold; font-size: 18px; box-shadow: 0 4px 15px rgba(76, 175, 80, 0.4);">📋 OTVORIŤ V NOVOM TABE</a>' +
-                        '</div>';
+                    linkDiv.style.cssText = 'margin-top: 20px; padding: 20px; background: linear-gradient(135deg, #e8f5e9 0%, #c8e6c9 100%); border-radius: 12px; text-align: center; border: 2px solid #4caf50;';
+                    
+                    const title = document.createElement('p');
+                    title.style.cssText = 'margin: 0 0 15px 0; font-size: 16px; color: #2e7d32;';
+                    title.innerHTML = '<strong>✅ QR kód bol naskenovaný!</strong>';
+                    linkDiv.appendChild(title);
+                    
+                    const info = document.createElement('p');
+                    info.style.cssText = 'margin: 0 0 15px 0; color: #388e3c;';
+                    info.textContent = name + ' • ' + membership;
+                    linkDiv.appendChild(info);
+                    
+                    const urlInput = document.createElement('input');
+                    urlInput.type = 'text';
+                    urlInput.value = redirectUrl;
+                    urlInput.readOnly = true;
+                    urlInput.style.cssText = 'width: 100%; padding: 10px; border: 1px solid #ccc; border-radius: 4px; font-size: 11px; margin-bottom: 15px; cursor: pointer; box-sizing: border-box;';
+                    urlInput.title = 'Klikni pre skopírovanie';
+                    urlInput.onclick = function() { this.select(); };
+                    linkDiv.appendChild(urlInput);
+                    
+                    const br = document.createElement('br');
+                    linkDiv.appendChild(br);
+                    
+                    const link = document.createElement('a');
+                    link.href = redirectUrl;
+                    link.target = '_blank';
+                    link.style.cssText = 'display: inline-block; padding: 15px 30px; background: linear-gradient(135deg, #4caf50 0%, #45a049 100%); color: white; text-decoration: none; border-radius: 8px; font-weight: bold; font-size: 18px; box-shadow: 0 4px 15px rgba(76, 175, 80, 0.4);';
+                    link.textContent = '📋 OTVORIŤ V NOVOM TABE';
+                    linkDiv.appendChild(link);
+                    
                     container.appendChild(linkDiv);
                 }
                 
