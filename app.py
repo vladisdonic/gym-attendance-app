@@ -271,53 +271,36 @@ def get_monthly_statistics(client, spreadsheet_id):
 
 def get_next_training_time():
     """
-    Určí najbližší čas tréningu na základe aktuálneho času.
-    Ak uplynula 1 hodina od začiatku tréningu, vyberie sa najbližší ďalší.
+    Určí čas tréningu na základe aktuálneho času.
     
-    Logika:
-    - Pred 9:00 → 9:00
-    - 9:00-9:59 → 9:00 (ešte neuplynula 1 hodina)
-    - 10:00-16:59 → 17:00 (po uplynutí 1 hodiny od 9:00)
-    - 17:00-17:59 → 17:00 (ešte neuplynula 1 hodina)
-    - 18:00-19:29 → 18:30 (po 18:00 sa vyberie 18:30)
-    - 19:30+ → 9:00 (na ďalší deň, po uplynutí 1 hodiny od 18:30)
+    Logika prihlásenia:
+    - 00:00 - 09:59 → prihlásenie na 9:00 (ranný tréning)
+    - 10:00 - 17:59 → prihlásenie na 17:00 (popoludňajší tréning)
+    - 18:00 - 23:59 → prihlásenie na 18:30 (večerný tréning)
+    
+    Vysvetlenie:
+    - Na tréning o 9:00 sa dá prihlásiť kedykoľvek pred ním alebo do 10:00
+    - Po 10:00 sa automaticky prihlasujem na 17:00
+    - Po 18:00 sa automaticky prihlasujem na 18:30 (platí do konca dňa)
+    - Po polnoci sa prihlasujem na ranný tréning o 9:00
     
     Returns:
-        str: Čas tréningu (napr. "9:00", "17:00", "18:30")
+        str: Čas tréningu ("9:00", "17:00", alebo "18:30")
     """
     # Použiť lokálny čas (Europe/Bratislava)
     now = get_local_time()
     current_hour = now.hour
-    current_minute = now.minute
-    current_time_minutes = current_hour * 60 + current_minute
     
-    # Časy tréningov v minútach od polnoci
-    training_9_00 = 9 * 60  # 540 minút
-    training_17_00 = 17 * 60  # 1020 minút
-    training_18_30 = 18 * 60 + 30  # 1110 minút
-    
-    # Pred 9:00 → 9:00
-    if current_time_minutes < training_9_00:
+    # 00:00 - 09:59 → 9:00 (ranný tréning)
+    if current_hour < 10:
         return "9:00"
     
-    # 9:00-9:59 → 9:00 (ešte neuplynula 1 hodina)
-    if training_9_00 <= current_time_minutes < training_9_00 + 60:
-        return "9:00"
-    
-    # 10:00-16:59 → 17:00 (po uplynutí 1 hodiny od 9:00)
-    if training_9_00 + 60 <= current_time_minutes < training_17_00:
+    # 10:00 - 17:59 → 17:00 (popoludňajší tréning)
+    if current_hour < 18:
         return "17:00"
     
-    # 17:00-17:59 → 17:00 (ešte neuplynula 1 hodina)
-    if training_17_00 <= current_time_minutes < training_17_00 + 60:
-        return "17:00"
-    
-    # 18:00-19:29 → 18:30 (po 18:00 sa vyberie 18:30)
-    if current_time_minutes >= 18 * 60 and current_time_minutes < training_18_30 + 60:
+    # 18:00 - 23:59 → 18:30 (večerný tréning)
         return "18:30"
-    
-    # 19:30+ → 9:00 (na ďalší deň, po uplynutí 1 hodiny od 18:30)
-    return "9:00"
 
 
 def participant_view(worksheet, query_params=None):
@@ -715,34 +698,18 @@ def participant_view(worksheet, query_params=None):
                     
                     let selectedTime = '9:00'; // Predvolená hodnota
                     
-                    // Časy tréningov v minútach
-                    const training_9_00 = 9 * 60;      // 540 minút
-                    const training_17_00 = 17 * 60;    // 1020 minút
-                    const training_18_30 = 18 * 60 + 30; // 1110 minút
+                    // Automatický výber času tréningu podľa aktuálneho času
+                    // 00:00 - 09:59 → 9:00 (ranný tréning)
+                    // 10:00 - 17:59 → 17:00 (popoludňajší tréning)
+                    // 18:00 - 23:59 → 18:30 (večerný tréning)
+                    const currentHour = now.getHours();
                     
-                    // Pred 9:00 → 9:00
-                    if (currentTimeMinutes < training_9_00) {
+                    if (currentHour < 10) {
                         selectedTime = '9:00';
-                    }
-                    // 9:00-9:59 → 9:00 (ešte neuplynula 1 hodina)
-                    else if (training_9_00 <= currentTimeMinutes && currentTimeMinutes < training_9_00 + 60) {
-                        selectedTime = '9:00';
-                    }
-                    // 10:00-16:59 → 17:00 (po uplynutí 1 hodiny od 9:00)
-                    else if (training_9_00 + 60 <= currentTimeMinutes && currentTimeMinutes < training_17_00) {
+                    } else if (currentHour < 18) {
                         selectedTime = '17:00';
-                    }
-                    // 17:00-17:59 → 17:00 (ešte neuplynula 1 hodina)
-                    else if (training_17_00 <= currentTimeMinutes && currentTimeMinutes < training_17_00 + 60) {
-                        selectedTime = '17:00';
-                    }
-                    // 18:00-19:29 → 18:30 (po 18:00 sa vyberie 18:30)
-                    else if (currentTimeMinutes >= 18 * 60 && currentTimeMinutes < training_18_30 + 60) {
+                    } else {
                         selectedTime = '18:30';
-                    }
-                    // 19:30+ → 9:00 (na ďalší deň, po uplynutí 1 hodiny od 18:30)
-                    else {
-                        selectedTime = '9:00';
                     }
                     
                     console.log('NFC Mode - Vybratý čas:', selectedTime);
@@ -1931,8 +1898,8 @@ def scanner_view(worksheet):
                     clearInterval(countdownInterval);
                     successOverlay.classList.remove('visible');
                     restartScanner();
-                }
-            }, 1000);
+        }
+    }, 1000);
         }
         
         function updateHistoryDisplay() {
@@ -1976,9 +1943,9 @@ def scanner_view(worksheet):
             // Validácia
             if (!decodedText.includes('giantgym.streamlit.app')) {
                 setStatus('⚠️ Neplatný QR kód', 'warning');
-                setTimeout(() => {
+            setTimeout(() => {
                     isProcessing = false;
-                    lastScannedCode = null;
+                lastScannedCode = null;
                     setStatus('📷 Namier kameru na QR kód...', 'ready');
                 }, 2000);
                 return;
@@ -1989,7 +1956,20 @@ def scanner_view(worksheet):
                 const params = new URLSearchParams(url.search);
                 const name = params.get('name') || '';
                 const membership = params.get('membership') || '';
-                const time = params.get('time') || '17:00';
+                
+                // Automatický výber času ak nie je v QR kóde
+                // 00:00-09:59 → 9:00, 10:00-17:59 → 17:00, 18:00-23:59 → 18:30
+                let time = params.get('time');
+                if (!time) {
+                    const currentHour = new Date().getHours();
+                    if (currentHour < 10) {
+                        time = '9:00';
+                    } else if (currentHour < 18) {
+                        time = '17:00';
+                    } else {
+                        time = '18:30';
+                    }
+                }
                 
                 if (!name || !membership) {
                     setStatus('⚠️ Chýbajúce údaje v QR', 'warning');
@@ -2013,7 +1993,7 @@ def scanner_view(worksheet):
                 // Uložiť dochádzku na pozadí
                 saveAttendance(name, membership, time);
                 
-            } catch (e) {
+                    } catch (e) {
                 setStatus('❌ Chyba pri spracovaní', 'error');
                 setTimeout(() => {
                     isProcessing = false;
@@ -2025,7 +2005,7 @@ def scanner_view(worksheet):
         
         function restartScanner() {
             isProcessing = false;
-            lastScannedCode = null;
+                    lastScannedCode = null;
             isScanning = false;
             startScanner();
         }
@@ -2098,7 +2078,7 @@ def scanner_view(worksheet):
                 return;
             }
             debug('Html5Qrcode knižnica načítaná');
-            startScanner();
+                startScanner();
         }
         
         // Štart
