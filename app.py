@@ -2037,15 +2037,23 @@ def scanner_view(worksheet):
                     console.log('Nová URL vytvorená:', newUrl);
                     
                     // Zastaviť skenovanie OKAMŽITE (pred presmerovaním)
+                    // Musíme najprv zastaviť scanner pomocou stop(), potom clear()
                     addDebugMsg('🛑 Zastavujem skenovanie OKAMŽITE...');
                     if (html5QrcodeScanner) {
-                        html5QrcodeScanner.clear().then(() => {
-                            addDebugMsg('✅ Skenovanie zastavené');
+                        // Najprv zastaviť scanner
+                        html5QrcodeScanner.stop().then(() => {
+                            addDebugMsg('✅ Scanner zastavený (stop)');
+                            // Potom vyčistiť
+                            return html5QrcodeScanner.clear();
+                        }).then(() => {
+                            addDebugMsg('✅ Scanner vyčistený (clear)');
                             isScanning = false;
+                            html5QrcodeScanner = null;
                         }).catch(err => {
-                            addDebugMsg('❌ Chyba pri zastavení skenovania: ' + err.message);
+                            addDebugMsg('❌ Chyba pri zastavení skenovania: ' + (err.message || err.toString()));
                             console.error('Chyba pri zastavení skenovania:', err);
                             isScanning = false;
+                            html5QrcodeScanner = null;
                         });
                     } else {
                         addDebugMsg('⚠️ html5QrcodeScanner nie je dostupný');
