@@ -1938,42 +1938,44 @@ def scanner_view(worksheet):
                     html5QrcodeScanner.stop().catch(() => {});
                 }
                 
-                // Vytvoriť URL pre presmerovanie s parametrami
-                const redirectParams = new URLSearchParams();
-                redirectParams.set('view', 'scanner');
-                redirectParams.set('qr_name', name);
-                redirectParams.set('qr_membership', membership);
+                // Vytvoriť URL pre presmerovanie
+                // KĽÚČOVÁ OPRAVA: Použiť formulár s target="_top" na obídenie cross-origin obmedzení
+                const baseUrl = 'https://giantgym.streamlit.app/';
+                
+                debug('Vytváram presmerovací formulár...');
+                debug('Meno: ' + name);
+                debug('Členstvo: ' + membership);
+                debug('Čas: ' + time);
+                
+                // Vytvoriť skrytý formulár a odoslať ho
+                const form = document.createElement('form');
+                form.method = 'GET';
+                form.action = baseUrl;
+                form.target = '_top';  // Toto je kľúčové - presmeruje celú stránku
+                form.style.display = 'none';
+                
+                // Pridať hidden inputy pre parametre
+                const addInput = (name, value) => {
+                    const input = document.createElement('input');
+                    input.type = 'hidden';
+                    input.name = name;
+                    input.value = value;
+                    form.appendChild(input);
+                };
+                
+                addInput('view', 'scanner');
+                addInput('qr_name', name);
+                addInput('qr_membership', membership);
                 if (time) {
-                    redirectParams.set('qr_time', time);
+                    addInput('qr_time', time);
                 }
-                redirectParams.set('qr_auto', '1');
+                addInput('qr_auto', '1');
                 
-                const redirectUrl = window.location.origin + window.location.pathname + '?' + redirectParams.toString();
-                debug('Presmerovanie na: ' + redirectUrl);
+                document.body.appendChild(form);
+                debug('Formulár vytvorený, odosielam...');
                 
-                // KĽÚČOVÁ OPRAVA: Použiť window.top pre presmerovanie celej stránky (nie len iframe)
-                try {
-                    if (window.top && window.top !== window) {
-                        // Sme v iframe - presmeruj hlavnú stránku
-                        window.top.location.href = redirectUrl;
-                    } else {
-                        // Nie sme v iframe
-                        window.location.href = redirectUrl;
-                    }
-                } catch (e) {
-                    // Ak window.top nie je prístupný (cross-origin), skús window.parent
-                    debug('window.top neprístupný, skúšam window.parent');
-                    try {
-                        window.parent.location.href = redirectUrl;
-                    } catch (e2) {
-                        // Posledná možnosť - skúsime postMessage
-                        debug('Skúšam postMessage...');
-                        window.parent.postMessage({
-                            type: 'QR_REDIRECT',
-                            url: redirectUrl
-                        }, '*');
-                    }
-                }
+                // Odoslať formulár
+                form.submit();
                 
             } catch (e) {
                 debug('Chyba: ' + e.message);
