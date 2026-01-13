@@ -2010,13 +2010,18 @@ def scanner_view(worksheet):
                         try {
                             if (window.parent && window.parent !== window) {
                                 // Pošli správu hlavnej stránke
-                                addDebugMsg('📨 Posielam správu hlavnej stránke cez postMessage');
-                                console.log('Posielam správu hlavnej stránke:', newUrl);
-                                window.parent.postMessage({
+                                const message = {
                                     type: 'QR_SCAN_SUCCESS',
                                     url: newUrl
-                                }, '*'); // '*' pre cross-origin komunikáciu
-                                addDebugMsg('✅ Správa odoslaná');
+                                };
+                                addDebugMsg('📨 Posielam správu hlavnej stránke cez postMessage');
+                                addDebugMsg('📨 Správa: ' + JSON.stringify(message));
+                                console.log('📨 Posielam správu hlavnej stránke:', message);
+                                console.log('📨 window.parent:', window.parent);
+                                console.log('📨 window.parent.location:', window.parent.location);
+                                window.parent.postMessage(message, '*'); // '*' pre cross-origin komunikáciu
+                                addDebugMsg('✅ Správa odoslaná cez postMessage');
+                                console.log('✅ Správa odoslaná');
                             } else {
                                 // Ak nie sme v iframe, presmerovať priamo
                                 addDebugMsg('🌐 Používam window.location.href');
