@@ -1923,8 +1923,15 @@ def scanner_view(worksheet):
         let isScanning = false;
         let lastScannedCode = null;
         let scanCooldown = false;
+        let isProcessing = false; // Flag na zabránenie opakovanému spracovaniu
         
         function onScanSuccess(decodedText, decodedResult) {
+            // Ak už spracovávame, ignorovať
+            if (isProcessing) {
+                addDebugMsg('⏸️ Už spracovávam, ignorujem');
+                return;
+            }
+            
             // Debug - zobraziť všetky parametre
             addDebugMsg('✅ onScanSuccess called');
             console.log('onScanSuccess called with:', { decodedText, decodedResult });
@@ -1945,16 +1952,19 @@ def scanner_view(worksheet):
             
             // Ignorovať duplikáty (rovnaký QR kód skenovaný viackrát)
             if (decodedText === lastScannedCode && scanCooldown) {
+                addDebugMsg('⏸️ Duplikát, ignorujem');
                 return;
             }
             
             lastScannedCode = decodedText;
             scanCooldown = true;
+            isProcessing = true; // Nastaviť flag, že spracovávame
             
-            // Resetovať cooldown po 2 sekundách
+            // Resetovať cooldown po 5 sekundách (dlhšie, aby sa zabránilo opakovanému skenu)
             setTimeout(() => {
                 scanCooldown = false;
-            }, 2000);
+                lastScannedCode = null;
+            }, 5000);
             
             addDebugMsg('📱 QR kód naskenovaný: ' + (decodedText ? decodedText.substring(0, 50) + '...' : 'PRÁZDNY'));
             console.log('QR kód naskenovaný:', decodedText);
@@ -2026,31 +2036,41 @@ def scanner_view(worksheet):
                     addDebugMsg('🔗 Nová URL vytvorená: ' + newUrl);
                     console.log('Nová URL vytvorená:', newUrl);
                     
+                    // Zastaviť skenovanie OKAMŽITE (pred presmerovaním)
+                    addDebugMsg('🛑 Zastavujem skenovanie OKAMŽITE...');
+                    if (html5QrcodeScanner) {
+                        html5QrcodeScanner.clear().then(() => {
+                            addDebugMsg('✅ Skenovanie zastavené');
+                            isScanning = false;
+                        }).catch(err => {
+                            addDebugMsg('❌ Chyba pri zastavení skenovania: ' + err.message);
+                            console.error('Chyba pri zastavení skenovania:', err);
+                            isScanning = false;
+                        });
+                    } else {
+                        addDebugMsg('⚠️ html5QrcodeScanner nie je dostupný');
+                        isScanning = false;
+                    }
+                    
                     // Presmerovať hlavnú stránku (nie iframe) na novú URL
                     addDebugMsg('⏳ Začínam presmerovanie hlavnej stránky za 500ms...');
                     console.log('Začínam presmerovanie na:', newUrl);
                     
                     // Malé oneskorenie, aby sa hláška stihla zobraziť
                     setTimeout(() => {
-                        addDebugMsg('🚀 Spúšťam presmerovanie cez postMessage...');
-                        console.log('Spúšťam presmerovanie cez postMessage...');
+                        addDebugMsg('🚀 Spúšťam presmerovanie...');
+                        console.log('Spúšťam presmerovanie...');
                         
-                        // Použiť postMessage API na komunikáciu s hlavnou stránkou
+                        // Skúsiť priame presmerovanie cez window.top.location.href
                         try {
-                            if (window.parent && window.parent !== window) {
-                                // Pošli správu hlavnej stránke
-                                const message = {
-                                    type: 'QR_SCAN_SUCCESS',
-                                    url: newUrl
-                                };
-                                addDebugMsg('📨 Posielam správu hlavnej stránke cez postMessage');
-                                addDebugMsg('📨 Správa: ' + JSON.stringify(message));
-                                console.log('📨 Posielam správu hlavnej stránke:', message);
-                                console.log('📨 window.parent:', window.parent);
-                                console.log('📨 window.parent.location:', window.parent.location);
-                                window.parent.postMessage(message, '*'); // '*' pre cross-origin komunikáciu
-                                addDebugMsg('✅ Správa odoslaná cez postMessage');
-                                console.log('✅ Správa odoslaná');
+                            if (window.top && window.top !== window) {
+                                // Ak sme v iframe, presmerovať hlavnú stránku
+                                addDebugMsg('🌐 Používam window.top.location.href');
+                                console.log('Používam window.top.location.href');
+                                console.log('window.top:', window.top);
+                                console.log('window.top.location:', window.top.location);
+                                window.top.location.href = newUrl;
+                                addDebugMsg('✅ Presmerovanie cez window.top.location.href');
                             } else {
                                 // Ak nie sme v iframe, presmerovať priamo
                                 addDebugMsg('🌐 Používam window.location.href');
@@ -2058,21 +2078,24 @@ def scanner_view(worksheet):
                                 window.location.href = newUrl;
                             }
                         } catch (e) {
-                            addDebugMsg('❌ Chyba pri postMessage: ' + e.message);
-                            console.error('Chyba pri postMessage:', e);
+                            addDebugMsg('❌ Chyba pri presmerovaní: ' + (e.message || e.toString()));
+                            console.error('Chyba pri presmerovaní:', e);
                             
-                            // Fallback 1 - skúsiť window.open s _self targetom
+                            // Fallback 1 - skúsiť postMessage
                             try {
-                                addDebugMsg('🔄 Fallback 1: používam window.open s _self');
-                                console.log('Fallback 1: používam window.open s _self');
-                                const opened = window.open(newUrl, '_self');
-                                if (opened) {
-                                    addDebugMsg('✅ Presmerovanie cez window.open(_self)');
+                                addDebugMsg('🔄 Fallback 1: používam postMessage');
+                                console.log('Fallback 1: používam postMessage');
+                                if (window.parent && window.parent !== window) {
+                                    window.parent.postMessage({
+                                        type: 'QR_SCAN_SUCCESS',
+                                        url: newUrl
+                                    }, '*');
+                                    addDebugMsg('✅ Správa odoslaná cez postMessage');
                                 } else {
-                                    throw new Error('window.open vrátil null');
+                                    throw new Error('window.parent nie je dostupný');
                                 }
                             } catch (e2) {
-                                addDebugMsg('❌ Fallback 1 zlyhal: ' + e2.message);
+                                addDebugMsg('❌ Fallback 1 zlyhal: ' + (e2.message || e2.toString()));
                                 console.error('Fallback 1 zlyhal:', e2);
                                 
                                 // Fallback 2 - skúsiť window.open s _top
@@ -2082,7 +2105,7 @@ def scanner_view(worksheet):
                                     window.open(newUrl, '_top');
                                     addDebugMsg('✅ Presmerovanie cez window.open(_top)');
                                 } catch (e3) {
-                                    addDebugMsg('❌ Aj fallback 2 zlyhal: ' + e3.message);
+                                    addDebugMsg('❌ Aj fallback 2 zlyhal: ' + (e3.message || e3.toString()));
                                     console.error('Aj fallback 2 zlyhal:', e3);
                                     
                                     // Posledný pokus - zobraziť chybu a link
@@ -2094,29 +2117,19 @@ def scanner_view(worksheet):
                         }
                     }, 500);
                     
-                    // Zastaviť skenovanie AŽ PO vytvorení URL a nastavení timeoutu
-                    addDebugMsg('🛑 Zastavujem skenovanie po nastavení presmerovania...');
-                    if (html5QrcodeScanner) {
-                        html5QrcodeScanner.clear().then(() => {
-                            addDebugMsg('✅ Skenovanie zastavené');
-                        }).catch(err => {
-                            addDebugMsg('❌ Chyba pri zastavení skenovania: ' + err.message);
-                            console.error('Chyba pri zastavení skenovania:', err);
-                        });
-                    } else {
-                        addDebugMsg('⚠️ html5QrcodeScanner nie je dostupný');
-                    }
-                    
                 } catch (e) {
-                    addDebugMsg('❌ Chyba pri extrahovaní údajov z URL: ' + e.message);
-                    addDebugMsg('❌ Stack trace: ' + (e.stack ? e.stack.substring(0, 200) : 'N/A'));
+                    const errorMsg = e && e.message ? e.message : (e && e.toString ? e.toString() : 'Neznáma chyba');
+                    addDebugMsg('❌ Chyba pri extrahovaní údajov z URL: ' + errorMsg);
+                    addDebugMsg('❌ Stack trace: ' + (e && e.stack ? e.stack.substring(0, 200) : 'N/A'));
                     addDebugMsg('❌ decodedText: ' + (decodedText ? decodedText.substring(0, 100) : 'PRÁZDNY'));
                     console.error('Chyba pri extrahovaní údajov z URL:', e);
-                    console.error('Stack trace:', e.stack);
+                    console.error('Stack trace:', e && e.stack ? e.stack : 'N/A');
                     console.error('decodedText hodnota:', decodedText);
                     if (resultsDiv) {
-                        resultsDiv.innerHTML = '<div style="padding: 15px; background-color: #f8d7da; border-radius: 5px; color: #721c24;">❌ Chyba pri spracovaní QR kódu: ' + e.message + '<br><br>Skopíruj túto chybu a pošli ju vývojárovi.</div>';
+                        resultsDiv.innerHTML = '<div style="padding: 15px; background-color: #f8d7da; border-radius: 5px; color: #721c24;">❌ Chyba pri spracovaní QR kódu: ' + errorMsg + '<br><br>Skopíruj túto chybu a pošli ju vývojárovi.</div>';
                     }
+                    // Resetovať flag, aby sa mohol skúsiť ďalší sken
+                    isProcessing = false;
                 }
             } else {
                 // Neplatný QR kód alebo chyba
