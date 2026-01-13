@@ -963,7 +963,7 @@ def participant_view(worksheet, query_params=None):
             
         # Zobrazenie vygenerovanej URL pre NFC
         if st.session_state.get('personal_nfc_url') and not st.session_state.get('personal_qr_code'):
-            st.markdown("---")
+        st.markdown("---")
             st.success("✅ **URL pre NFC tag vygenerovaná!**")
             st.markdown("### 🔗 Tvoja osobná URL:")
             st.code(st.session_state['personal_nfc_url'], language="text")
@@ -2032,19 +2032,34 @@ def scanner_view(worksheet):
                             addDebugMsg('❌ Chyba pri postMessage: ' + e.message);
                             console.error('Chyba pri postMessage:', e);
                             
-                            // Fallback - skúsiť window.open
+                            // Fallback 1 - skúsiť window.open s _self targetom
                             try {
-                                addDebugMsg('🔄 Fallback: používam window.open');
-                                console.log('Fallback: používam window.open');
-                                window.open(newUrl, '_top');
-                                addDebugMsg('✅ Presmerovanie cez window.open');
+                                addDebugMsg('🔄 Fallback 1: používam window.open s _self');
+                                console.log('Fallback 1: používam window.open s _self');
+                                const opened = window.open(newUrl, '_self');
+                                if (opened) {
+                                    addDebugMsg('✅ Presmerovanie cez window.open(_self)');
+                                } else {
+                                    throw new Error('window.open vrátil null');
+                                }
                             } catch (e2) {
-                                addDebugMsg('❌ Aj fallback zlyhal: ' + e2.message);
-                                console.error('Aj fallback zlyhal:', e2);
+                                addDebugMsg('❌ Fallback 1 zlyhal: ' + e2.message);
+                                console.error('Fallback 1 zlyhal:', e2);
                                 
-                                // Posledný pokus - zobraziť chybu a link
-                                if (resultsDiv) {
-                                    resultsDiv.innerHTML = '<div style="padding: 15px; background-color: #f8d7da; border-radius: 5px; color: #721c24;">❌ Chyba pri presmerovaní. <a href="' + newUrl + '" target="_top" style="color: #721c24; text-decoration: underline;">Klikni tu pre manuálne presmerovanie</a></div>';
+                                // Fallback 2 - skúsiť window.open s _top
+                                try {
+                                    addDebugMsg('🔄 Fallback 2: používam window.open s _top');
+                                    console.log('Fallback 2: používam window.open s _top');
+                                    window.open(newUrl, '_top');
+                                    addDebugMsg('✅ Presmerovanie cez window.open(_top)');
+                                } catch (e3) {
+                                    addDebugMsg('❌ Aj fallback 2 zlyhal: ' + e3.message);
+                                    console.error('Aj fallback 2 zlyhal:', e3);
+                                    
+                                    // Posledný pokus - zobraziť chybu a link
+                                    if (resultsDiv) {
+                                        resultsDiv.innerHTML = '<div style="padding: 15px; background-color: #f8d7da; border-radius: 5px; color: #721c24;">❌ Chyba pri presmerovaní. <a href="' + newUrl + '" target="_top" style="color: #721c24; text-decoration: underline;">Klikni tu pre manuálne presmerovanie</a></div>';
+                                    }
                                 }
                             }
                         }
