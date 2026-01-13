@@ -1724,605 +1724,387 @@ def scanner_view(worksheet):
     """Pohľad pre QR kód scanner v gyme - scanner + formulár."""
     
     st.title("📷 QR Kód Scanner - Gym")
-    st.markdown("**Naskenuj QR kód alebo vyplň formulár manuálne**")
+    st.markdown("**Naskenuj QR kód člena pre automatické prihlásenie**")
     
-    # Spracovať údaje z query params (ak prídu cez postMessage a reload)
+    # Spracovať údaje z query params (ak prídu z QR scanneru)
     query_params = st.query_params
-    qr_submit = query_params.get("qr_submit", "0") == "1"
-    if qr_submit and not st.session_state.get('qr_scanned_data'):
-        # Extrahovať údaje z query params a uložiť do session state
-        name = unquote(query_params.get("qr_name", ""))
-        membership = unquote(query_params.get("qr_membership", ""))
-        time = unquote(query_params.get("qr_time", ""))
+    qr_name = unquote(query_params.get("qr_name", ""))
+    qr_membership = unquote(query_params.get("qr_membership", ""))
+    qr_time = unquote(query_params.get("qr_time", ""))
+    qr_auto = query_params.get("qr_auto", "0") == "1"
+    
+    # Ak máme údaje z QR kódu
+    if qr_name and qr_membership:
+        # Automaticky vybrať čas ak nie je zadaný
+        if not qr_time:
+            qr_time = get_next_training_time()
         
-        if name and membership:
-            st.session_state['qr_scanned_data'] = {
-                'name': name,
-                'membership': membership,
-                'time': time
-            }
-            # Vyčistiť query params
-            st.query_params.clear()
-            st.rerun()
-    
-    # Načítať naskenované údaje (ak existujú)
-    scanned_data = st.session_state.get('qr_scanned_data', {})
-    default_name = scanned_data.get('name', '')
-    default_membership = scanned_data.get('membership', '')
-    default_time = scanned_data.get('time', '')
-    
-    # Ak čas nie je v údajoch, automaticky vyberieme najbližší
-    if not default_time:
-        default_time = get_next_training_time()
-    
-    # Nájsť indexy pre selectboxy
-    default_membership_index = 0
-    if default_membership:
-        try:
-            default_membership_index = MEMBERSHIP_TYPES.index(default_membership)
-        except ValueError:
-            default_membership_index = 1  # Predvolená: Mesačné členstvo
-    
-    default_time_index = 0
-    if default_time:
-        try:
-            default_time_index = TRAINING_TIMES.index(default_time)
-        except ValueError:
-            default_time_index = 0
+        # Zobraziť údaje a automaticky odoslať
+        st.success(f"✅ **QR kód naskenovaný!**")
+        st.markdown(f"""
+        **Údaje z QR kódu:**
+        - 👤 **Meno:** {qr_name}
+        - 🏷️ **Členstvo:** {qr_membership}
+        - ⏰ **Čas tréningu:** {qr_time}
+        """)
+        
+        # Validácia údajov
+        is_valid = qr_membership in MEMBERSHIP_TYPES and qr_time in TRAINING_TIMES
+        
+        if is_valid:
+            # Automaticky odoslať prihlásenie
+            if add_attendance(worksheet, qr_name, qr_membership, qr_time):
+                st.balloons()
+                st.markdown(f"""
+                <div style="padding: 30px; border-radius: 15px; background: linear-gradient(135deg, #28a745 0%, #20c997 100%); color: white; text-align: center; margin: 20px 0;">
+                    <h1 style="margin: 0; font-size: 48px;">✅</h1>
+                    <h2 style="margin: 10px 0;">{qr_name}</h2>
+                    <p style="margin: 5px 0; font-size: 18px;">Úspešne prihlásený/á na tréning</p>
+                    <p style="margin: 5px 0; opacity: 0.9;">{qr_membership} • {qr_time}</p>
+                </div>
+                """, unsafe_allow_html=True)
+                
+                # Tlačidlo na ďalšie skenovanie
+                if st.button("📷 Skenovať ďalšieho člena", type="primary", use_container_width=True):
+                    st.query_params.clear()
+                    st.query_params["view"] = "scanner"
+                    st.rerun()
+                    
+                # Automaticky presmerovať po 3 sekundách
+                st.markdown("""
+                <script>
+                setTimeout(function() {
+                    window.location.href = window.location.pathname + '?view=scanner';
+                }, 3000);
+                </script>
+                <p style="text-align: center; color: #666; margin-top: 10px;">Automatické presmerovanie za 3 sekundy...</p>
+                """, unsafe_allow_html=True)
+            else:
+                st.error("❌ Chyba pri prihlasovaní. Skús to znova.")
+                if st.button("🔄 Skúsiť znova", type="primary", use_container_width=True):
+                    st.query_params.clear()
+                    st.query_params["view"] = "scanner"
+                    st.rerun()
+        else:
+            st.error("❌ Neplatné údaje v QR kóde. Skontroluj typ členstva a čas tréningu.")
+            if st.button("📷 Skenovať znova", type="primary", use_container_width=True):
+                st.query_params.clear()
+                st.query_params["view"] = "scanner"
+                st.rerun()
+        
+        return  # Ukončiť funkciu, nechceme zobraziť scanner
     
     st.markdown("---")
     
-    # Sekcia 1: QR Scanner
+    # Sekcia: QR Scanner
     st.markdown("### 📷 QR Kód Scanner")
     st.info("""
     **Ako to funguje:**
     1. **Povol prístup ku kamere** - klikni na ikonu kamery v adresnom riadku a povoľ prístup
-    2. Používateľ otvorí svoj QR kód na telefóne
-    3. Zameria fotoaparát tabletu/počítača na QR kód
-    4. **Automaticky sa vyplní formulár nižšie**
+    2. Člen ukáže svoj QR kód na telefóne
+    3. Zamier kameru na QR kód
+    4. **Automaticky sa prihlási na tréning**
     """)
     
-    # JavaScript listener pre postMessage z iframe (pre QR scanner) - musí byť aj tu
-    st.markdown("""
-    <script>
-    (function() {
-        console.log('🔍 PostMessage listener sa inicializuje v scanner_view...');
-        // Počúvať na správy z iframe (QR scanner)
-        function handleMessage(event) {
-            console.log('📨 Správa prijatá v scanner_view:', event);
-            console.log('📨 event.data:', event.data);
-            console.log('📨 event.origin:', event.origin);
-            
-            if (event.data && event.data.type === 'QR_SCAN_DATA') {
-                console.log('✅ QR scan data received:', event.data.data);
-                const scanData = event.data.data;
-                
-                // Uložiť údaje do session storage a spustiť rerun
-                // Použijeme Streamlit's rerun mechanism cez query params
-                const params = new URLSearchParams(window.location.search);
-                params.set('qr_name', scanData.name);
-                params.set('qr_membership', scanData.membership);
-                if (scanData.time) {
-                    params.set('qr_time', scanData.time);
-                }
-                params.set('qr_submit', '1');
-                
-                // Aktualizovať URL a spustiť rerun
-                window.history.replaceState({}, '', window.location.pathname + '?' + params.toString());
-                window.location.reload();
-            }
-        }
-        
-        // Odstrániť existujúci listener, ak existuje
-        window.removeEventListener('message', handleMessage);
-        // Pridať nový listener
-        window.addEventListener('message', handleMessage);
-        console.log('✅ PostMessage listener registrovaný v scanner_view');
-    })();
-    </script>
-    """, unsafe_allow_html=True)
-    
-    # Spracovať údaje z query params (ak prídu cez postMessage a reload)
-    query_params = st.query_params
-    qr_submit = query_params.get("qr_submit", "0") == "1"
-    if qr_submit and not st.session_state.get('qr_scanned_data'):
-        # Extrahovať údaje z query params a uložiť do session state
-        name = unquote(query_params.get("qr_name", ""))
-        membership = unquote(query_params.get("qr_membership", ""))
-        time = unquote(query_params.get("qr_time", ""))
-        
-        if name and membership:
-            st.session_state['qr_scanned_data'] = {
-                'name': name,
-                'membership': membership,
-                'time': time
-            }
-            # Nastaviť flag pre automatické odoslanie
-            st.session_state['auto_submit_scanner'] = True
-            # Vyčistiť query params
-            st.query_params.clear()
-            st.rerun()
-    
-    # Automaticky spustiť scanner po úspešnom prihlásení
-    if st.session_state.get('restart_scanner_after_success'):
-        st.markdown("""
-        <script>
-        if (window.restartScanner) {
-            setTimeout(function() {
-                window.restartScanner();
-            }, 500);
-        }
-        </script>
-        """, unsafe_allow_html=True)
-        del st.session_state['restart_scanner_after_success']
-    
     # Tlačidlo na manuálne spustenie scanneru
-    if st.button("🔄 Spustiť Scanner", key="start_scanner", use_container_width=True, type="primary"):
-        st.session_state['restart_scanner'] = True
+    if st.button("🔄 Reštartovať Scanner", key="start_scanner", use_container_width=True):
         st.rerun()
     
-    # JavaScript na manuálne spustenie scanneru (ak bolo stlačené tlačidlo)
-    if st.session_state.get('restart_scanner'):
-        st.markdown("""
-        <script>
-        if (window.restartScanner) {
-            setTimeout(function() {
-                window.restartScanner();
-            }, 500);
-        }
-        </script>
-        """, unsafe_allow_html=True)
-        del st.session_state['restart_scanner']
-    
-    # Zobraziť scanner HTML (PRED formulárom)
-    # JavaScript riešenie s html5-qrcode knižnicou
+    # QR Scanner HTML s opraveným presmerovaním
     scanner_html = """
-    <div id="qr-scanner-debug" style="padding: 10px; background: #f0f0f0; border: 1px solid #ccc; margin: 10px 0; font-family: monospace; font-size: 12px; max-height: 200px; overflow-y: auto; position: relative; z-index: 1000;"></div>
-    <div id="qr-reader" style="width: 100%; max-width: 600px; margin: 0 auto;"></div>
-    <div id="qr-reader-results" style="margin-top: 20px;"></div>
+    <style>
+        #qr-scanner-container {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+        }
+        #qr-scanner-status {
+            padding: 12px 16px;
+            border-radius: 8px;
+            margin: 10px 0;
+            font-size: 14px;
+            text-align: center;
+        }
+        .status-ready { background: #d4edda; color: #155724; }
+        .status-scanning { background: #cce5ff; color: #004085; }
+        .status-success { background: #d4edda; color: #155724; }
+        .status-error { background: #f8d7da; color: #721c24; }
+        .status-warning { background: #fff3cd; color: #856404; }
+        #qr-reader {
+            width: 100%;
+            max-width: 500px;
+            margin: 0 auto;
+            border-radius: 12px;
+            overflow: hidden;
+        }
+        #qr-debug {
+            padding: 8px 12px;
+            background: #f8f9fa;
+            border: 1px solid #dee2e6;
+            border-radius: 6px;
+            margin: 10px 0;
+            font-family: monospace;
+            font-size: 11px;
+            max-height: 150px;
+            overflow-y: auto;
+            display: none;
+        }
+        #qr-debug.visible { display: block; }
+    </style>
+    
+    <div id="qr-scanner-container">
+        <div id="qr-scanner-status" class="status-scanning">⏳ Načítavam kameru...</div>
+        <div id="qr-reader"></div>
+        <div id="qr-debug"></div>
+    </div>
     
     <script src="https://unpkg.com/html5-qrcode@2.3.8/html5-qrcode.min.js"></script>
     <script>
-    // Debug funkcia - pridá správu do debug divu
-    function addDebugMsg(msg) {
-        try {
-            let debugDiv = document.getElementById('qr-scanner-debug');
-            // Ak debug div neexistuje, vytvor ho
-            if (!debugDiv) {
-                debugDiv = document.createElement('div');
-                debugDiv.id = 'qr-scanner-debug';
-                debugDiv.style.cssText = 'padding: 10px; background: #f0f0f0; border: 1px solid #ccc; margin: 10px 0; font-family: monospace; font-size: 12px; max-height: 200px; overflow-y: auto; position: relative; z-index: 1000;';
-                // Vložiť na začiatok body alebo pred qr-reader
-                const qrReader = document.getElementById('qr-reader');
-                if (qrReader && qrReader.parentNode) {
-                    qrReader.parentNode.insertBefore(debugDiv, qrReader);
-                } else {
-                    document.body.insertBefore(debugDiv, document.body.firstChild);
-                }
-            }
-            const timestamp = new Date().toLocaleTimeString();
-            debugDiv.innerHTML += '[' + timestamp + '] ' + msg + '<br>';
-            debugDiv.scrollTop = debugDiv.scrollHeight; // Auto-scroll
-            // Zabezpečiť, že debug div je viditeľný
-            debugDiv.style.display = 'block';
-            debugDiv.style.visibility = 'visible';
-            console.log(msg);
-        } catch (e) {
-            console.error('Chyba pri pridávaní debug správy:', e);
-        }
-    }
-    
-    // Debug - zobraziť, či sa JavaScript spúšťa
-    try {
-        // Zabezpečiť, že debug div existuje a je viditeľný
-        setTimeout(function() {
-            const debugDiv = document.getElementById('qr-scanner-debug');
-            if (debugDiv) {
-                debugDiv.style.display = 'block';
-                debugDiv.style.visibility = 'visible';
-                debugDiv.style.opacity = '1';
-            }
-        }, 100);
-        
-        addDebugMsg('🔍 QR Scanner Script sa začal načítavať...');
-        addDebugMsg('🔍 document.readyState: ' + document.readyState);
-        addDebugMsg('🔍 window.location: ' + window.location.href);
-    } catch (e) {
-        console.error('Chyba pri inicializácii debug:', e);
-    }
-    
-    // Skontrolovať, či sa knižnica načítala
-    setTimeout(function() {
-        if (typeof Html5Qrcode === 'undefined') {
-            console.error('❌ Html5Qrcode knižnica sa nenačítala!');
-            const resultsDiv = document.getElementById('qr-reader-results');
-            if (resultsDiv) {
-                resultsDiv.innerHTML = '<div style="padding: 15px; background-color: #f8d7da; border-radius: 5px; color: #721c24;">❌ Chyba: QR scanner knižnica sa nenačítala. Skús obnoviť stránku.</div>';
-            }
-        } else {
-            console.log('✅ Html5Qrcode knižnica sa načítala');
-        }
-    }, 1000);
-    
     (function() {
-        console.log('🔍 QR Scanner IIFE sa spúšťa...');
+        const statusDiv = document.getElementById('qr-scanner-status');
+        const debugDiv = document.getElementById('qr-debug');
         let html5QrcodeScanner = null;
         let isScanning = false;
         let lastScannedCode = null;
-        let scanCooldown = false;
-        let isProcessing = false; // Flag na zabránenie opakovanému spracovaniu
+        let isProcessing = false;
         
-        function onScanSuccess(decodedText, decodedResult) {
-            // Ak už spracovávame, ignorovať
-            if (isProcessing) {
-                addDebugMsg('⏸️ Už spracovávam, ignorujem');
-                return;
-            }
-            
-            // Debug - zobraziť všetky parametre
-            addDebugMsg('✅ onScanSuccess called');
-            console.log('onScanSuccess called with:', { decodedText, decodedResult });
-            
-            // Skontrolovať, či je decodedText definovaný
-            if (!decodedText) {
-                console.error('decodedText je undefined!', decodedResult);
-                // Skúsiť získať text z decodedResult
-                if (decodedResult && decodedResult.text) {
-                    decodedText = decodedResult.text;
-                } else if (decodedResult && typeof decodedResult === 'string') {
-                    decodedText = decodedResult;
-                } else {
-                    console.error('Nepodarilo sa získať text z QR kódu');
-                    return;
-                }
-            }
-            
-            // Ignorovať duplikáty (rovnaký QR kód skenovaný viackrát)
-            if (decodedText === lastScannedCode && scanCooldown) {
-                addDebugMsg('⏸️ Duplikát, ignorujem');
-                return;
-            }
-            
-            lastScannedCode = decodedText;
-            scanCooldown = true;
-            isProcessing = true; // Nastaviť flag, že spracovávame
-            
-            // Resetovať cooldown po 5 sekundách (dlhšie, aby sa zabránilo opakovanému skenu)
-            setTimeout(() => {
-                scanCooldown = false;
-                lastScannedCode = null;
-            }, 5000);
-            
-            addDebugMsg('📱 QR kód naskenovaný: ' + (decodedText ? decodedText.substring(0, 50) + '...' : 'PRÁZDNY'));
-            console.log('QR kód naskenovaný:', decodedText);
-            console.log('Typ decodedText:', typeof decodedText);
-            console.log('Obsahuje giantgym.streamlit.app?', decodedText.includes('giantgym.streamlit.app'));
-            console.log('Obsahuje view=participant?', decodedText.includes('view=participant'));
-            
-            // Kontrola validity - skontrolovať, či je to string
-            const isValid = typeof decodedText === 'string' && 
-                           decodedText.includes('giantgym.streamlit.app') && 
-                           decodedText.includes('view=participant');
-            
-            addDebugMsg('🔍 Validácia výsledok: ' + isValid);
-            console.log('Validácia výsledok:', isValid);
-            
-            if (isValid) {
-                addDebugMsg('✅ Validný QR kód - extrahujem údaje');
-                console.log('✅ Validný QR kód - extrahujem údaje');
-                
-                // Zobraziť úspech OKAMŽITE (pred extrahovaním)
-                const resultsDiv = document.getElementById('qr-reader-results');
-                if (resultsDiv) {
-                    resultsDiv.innerHTML = '<div style="padding: 15px; background-color: #d4edda; border-radius: 5px; color: #155724; font-weight: bold;">✅ QR kód rozpoznaný! Registrujem na pozadí...</div>';
-                    addDebugMsg('✅ Hláška zobrazená v resultsDiv');
-                    console.log('Hláška zobrazená');
-                } else {
-                    addDebugMsg('❌ resultsDiv nie je dostupný!');
-                    console.error('resultsDiv nie je dostupný!');
-                }
-                
-                // Extrahovať parametre z URL PRED zastavením scanneru
-                addDebugMsg('🔍 Začínam extrahovanie údajov z URL (PRED zastavením scanneru)');
-                try {
-                    addDebugMsg('🔍 Začínam extrahovanie údajov z URL');
-                    console.log('Začínam extrahovanie údajov z URL:', decodedText);
-                    const url = new URL(decodedText);
-                    addDebugMsg('✅ URL objekt vytvorený');
-                    console.log('URL objekt vytvorený:', url);
-                    const params = new URLSearchParams(url.search);
-                    addDebugMsg('✅ URLSearchParams vytvorené');
-                    console.log('URLSearchParams vytvorené');
-                    const name = params.get('name') || '';
-                    const membership = params.get('membership') || '';
-                    const time = params.get('time') || '';
-                    
-                    addDebugMsg('📋 Extrahované údaje: name=' + name + ', membership=' + membership + ', time=' + time);
-                    console.log('Extrahované údaje:', { name, membership, time });
-                    
-                    // Uložiť údaje do Streamlit session state a spustiť rerun
-                    addDebugMsg('💾 Ukladám údaje do Streamlit session state...');
-                    console.log('Ukladám údaje do Streamlit session state...');
-                    
-                    // Použiť Streamlit's JavaScript API na komunikáciu s Python kódom
-                    // Namiesto presmerovania použijeme postMessage na komunikáciu s hlavnou stránkou
-                    const scanData = {
-                        name: name,
-                        membership: membership,
-                        time: time || ''
-                    };
-                    
-                    addDebugMsg('📨 Posielam údaje cez postMessage...');
-                    console.log('Posielam údaje:', scanData);
-                    
-                    // Poslať správu hlavnej stránke (nie iframe)
-                    try {
-                        if (window.parent && window.parent !== window) {
-                            // Ak sme v iframe, poslať správu hlavnej stránke
-                            window.parent.postMessage({
-                                type: 'QR_SCAN_DATA',
-                                data: scanData
-                            }, '*');
-                            addDebugMsg('✅ Správa odoslaná cez postMessage');
-                        } else {
-                            // Ak nie sme v iframe, použiť Streamlit's setComponentValue
-                            // Alebo použiť window.location.search na aktualizáciu URL
-                            addDebugMsg('🌐 Nie sme v iframe, používam window.location.search');
-                            const params = new URLSearchParams();
-                            params.set('qr_name', name);
-                            params.set('qr_membership', membership);
-                            if (time) {
-                                params.set('qr_time', time);
-                            }
-                            params.set('qr_submit', '1');
-                            window.location.search = params.toString();
-                        }
-                    } catch (e) {
-                        addDebugMsg('❌ Chyba pri odosielaní údajov: ' + (e.message || e.toString()));
-                        console.error('Chyba pri odosielaní údajov:', e);
-                    }
-                    
-                } catch (e) {
-                    const errorMsg = e && e.message ? e.message : (e && e.toString ? e.toString() : 'Neznáma chyba');
-                    addDebugMsg('❌ Chyba pri extrahovaní údajov z URL: ' + errorMsg);
-                    addDebugMsg('❌ Stack trace: ' + (e && e.stack ? e.stack.substring(0, 200) : 'N/A'));
-                    addDebugMsg('❌ decodedText: ' + (decodedText ? decodedText.substring(0, 100) : 'PRÁZDNY'));
-                    console.error('Chyba pri extrahovaní údajov z URL:', e);
-                    console.error('Stack trace:', e && e.stack ? e.stack : 'N/A');
-                    console.error('decodedText hodnota:', decodedText);
-                    if (resultsDiv) {
-                        resultsDiv.innerHTML = '<div style="padding: 15px; background-color: #f8d7da; border-radius: 5px; color: #721c24;">❌ Chyba pri spracovaní QR kódu: ' + errorMsg + '<br><br>Skopíruj túto chybu a pošli ju vývojárovi.</div>';
-                    }
-                    // Resetovať flag, aby sa mohol skúsiť ďalší sken
-                    isProcessing = false;
-                }
-            } else {
-                // Neplatný QR kód alebo chyba
-                const resultsDiv = document.getElementById('qr-reader-results');
-                let errorMsg = '⚠️ Tento QR kód nie je pre túto aplikáciu.';
-                
-                // Debug - zobraziť, čo bolo naskenované
-                if (decodedText) {
-                    errorMsg += '<br><br><small>Naskenovaný text: ' + decodedText.substring(0, 100) + '</small>';
-                    console.log('Neplatný QR kód:', decodedText);
-                } else {
-                    errorMsg += '<br><br><small>QR kód sa naskenoval, ale text je prázdny.</small>';
-                    console.error('QR kód bez textu:', decodedResult);
-                }
-                
-                resultsDiv.innerHTML = '<div style="padding: 15px; background-color: #fff3cd; border-radius: 5px; color: #856404; font-weight: bold;">' + errorMsg + '</div>';
-                
-                // Resetovať po 5 sekundách
-                setTimeout(() => {
-                    resultsDiv.innerHTML = '';
-                    lastScannedCode = null;
-                }, 5000);
-            }
+        function setStatus(message, type) {
+            statusDiv.textContent = message;
+            statusDiv.className = 'status-' + type;
         }
         
-        function onScanFailure(error) {
-            // Ignorovať chyby - len logovať
-            // console.log('Skenovanie pokračuje...', error);
+        function debug(msg) {
+            const time = new Date().toLocaleTimeString();
+            debugDiv.innerHTML += '[' + time + '] ' + msg + '<br>';
+            debugDiv.scrollTop = debugDiv.scrollHeight;
+            console.log('[QR Scanner]', msg);
+        }
+        
+        // Toggle debug s Ctrl+D
+        document.addEventListener('keydown', function(e) {
+            if (e.ctrlKey && e.key === 'd') {
+                debugDiv.classList.toggle('visible');
+                e.preventDefault();
+            }
+        });
+        
+        function onScanSuccess(decodedText) {
+            if (isProcessing) return;
+            if (decodedText === lastScannedCode) return;
+            
+            lastScannedCode = decodedText;
+            isProcessing = true;
+            
+            debug('QR naskenovaný: ' + decodedText.substring(0, 80) + '...');
+            
+            // Validácia - musí obsahovať giantgym URL
+            if (!decodedText.includes('giantgym.streamlit.app')) {
+                setStatus('⚠️ Neplatný QR kód - nie je pre Giant Gym', 'warning');
+                debug('Neplatný QR kód');
+                setTimeout(() => {
+                    isProcessing = false;
+                    lastScannedCode = null;
+                    setStatus('📷 Namier kameru na QR kód...', 'ready');
+                }, 3000);
+                return;
+            }
+            
+            setStatus('✅ QR kód rozpoznaný! Presmerovávam...', 'success');
+            debug('Platný QR kód, extrahujem údaje...');
+            
+            try {
+                const url = new URL(decodedText);
+                const params = new URLSearchParams(url.search);
+                
+                const name = params.get('name') || '';
+                const membership = params.get('membership') || '';
+                const time = params.get('time') || '';
+                
+                debug('Meno: ' + name);
+                debug('Členstvo: ' + membership);
+                debug('Čas: ' + time);
+                
+                if (!name || !membership) {
+                    setStatus('⚠️ QR kód neobsahuje potrebné údaje', 'warning');
+                    debug('Chýbajúce údaje v QR');
+                    setTimeout(() => {
+                        isProcessing = false;
+                        lastScannedCode = null;
+                        setStatus('📷 Namier kameru na QR kód...', 'ready');
+                    }, 3000);
+                    return;
+                }
+                
+                // Zastaviť scanner
+                if (html5QrcodeScanner) {
+                    html5QrcodeScanner.stop().catch(() => {});
+                }
+                
+                // Vytvoriť URL pre presmerovanie s parametrami
+                const redirectParams = new URLSearchParams();
+                redirectParams.set('view', 'scanner');
+                redirectParams.set('qr_name', name);
+                redirectParams.set('qr_membership', membership);
+                if (time) {
+                    redirectParams.set('qr_time', time);
+                }
+                redirectParams.set('qr_auto', '1');
+                
+                const redirectUrl = window.location.origin + window.location.pathname + '?' + redirectParams.toString();
+                debug('Presmerovanie na: ' + redirectUrl);
+                
+                // KĽÚČOVÁ OPRAVA: Použiť window.top pre presmerovanie celej stránky (nie len iframe)
+                try {
+                    if (window.top && window.top !== window) {
+                        // Sme v iframe - presmeruj hlavnú stránku
+                        window.top.location.href = redirectUrl;
+                    } else {
+                        // Nie sme v iframe
+                        window.location.href = redirectUrl;
+                    }
+                } catch (e) {
+                    // Ak window.top nie je prístupný (cross-origin), skús window.parent
+                    debug('window.top neprístupný, skúšam window.parent');
+                    try {
+                        window.parent.location.href = redirectUrl;
+                    } catch (e2) {
+                        // Posledná možnosť - skúsime postMessage
+                        debug('Skúšam postMessage...');
+                        window.parent.postMessage({
+                            type: 'QR_REDIRECT',
+                            url: redirectUrl
+                        }, '*');
+                    }
+                }
+                
+            } catch (e) {
+                debug('Chyba: ' + e.message);
+                setStatus('❌ Chyba pri spracovaní QR kódu', 'error');
+                setTimeout(() => {
+                    isProcessing = false;
+                    lastScannedCode = null;
+                    setStatus('📷 Namier kameru na QR kód...', 'ready');
+                }, 3000);
+            }
         }
         
         async function startScanner() {
-            addDebugMsg('🎬 startScanner volaná');
-            console.log('🔍 startScanner volaná');
-            console.log('🔍 isScanning:', isScanning);
+            if (isScanning) return;
             
-            if (isScanning) {
-                addDebugMsg('⏸️ Scanner už beží, preskakujem');
-                console.log('🔍 Scanner už beží, preskakujem');
-                return;
-            }
+            debug('Spúšťam scanner...');
+            setStatus('⏳ Spúšťam kameru...', 'scanning');
             
-            const resultsDiv = document.getElementById('qr-reader-results');
-            addDebugMsg('🔍 resultsDiv: ' + (resultsDiv ? 'OK' : 'NIE JE DOSTUPNÝ'));
-            console.log('🔍 resultsDiv:', resultsDiv);
-            
-            if (!resultsDiv) {
-                addDebugMsg('❌ resultsDiv nie je dostupný!');
-                console.error('🔍 resultsDiv nie je dostupný!');
-            }
-            
-            // Skúsiť najprv zadnú kameru (environment), potom prednú (user)
             const cameraConfigs = [
-                { facingMode: "environment" }, // Zadná kamera (pre tablety/telefóny)
-                { facingMode: "user" },         // Predná kamera (pre počítače)
-                { facingMode: { exact: "environment" } }, // Presne zadná
-                { facingMode: { exact: "user" } }        // Presne predná
+                { facingMode: "environment" },
+                { facingMode: "user" },
+                { facingMode: { exact: "environment" } },
+                { facingMode: { exact: "user" } }
             ];
             
             for (let i = 0; i < cameraConfigs.length; i++) {
                 try {
-                    isScanning = true;
                     html5QrcodeScanner = new Html5Qrcode("qr-reader");
-                    
-                    // Zobraziť správu o pokuse
-                    if (i > 0) {
-                        resultsDiv.innerHTML = '<div style="padding: 10px; background-color: #d1ecf1; border-radius: 5px; color: #0c5460;">🔄 Skúšam inú kameru...</div>';
-                    }
                     
                     await html5QrcodeScanner.start(
                         cameraConfigs[i],
                         {
                             fps: 10,
-                            qrbox: function(viewfinderWidth, viewfinderHeight) {
-                                // Dynamická veľkosť skenovacieho boxu (50% viewfinder)
-                                let minEdgePercentage = 0.5;
-                                let minEdgeSize = Math.min(viewfinderWidth, viewfinderHeight);
-                                let qrboxSize = Math.floor(minEdgeSize * minEdgePercentage);
-                                return {
-                                    width: qrboxSize,
-                                    height: qrboxSize
-                                };
+                            qrbox: function(w, h) {
+                                const size = Math.floor(Math.min(w, h) * 0.6);
+                                return { width: size, height: size };
                             },
-                            aspectRatio: 1.0,
-                            disableFlip: false
+                            aspectRatio: 1.0
                         },
-                        (decodedText, decodedResult) => {
-                            // Wrapper pre callback - zabezpečí správne parametre
-                            console.log('QR scanner callback:', { decodedText, decodedResult });
-                            onScanSuccess(decodedText, decodedResult);
-                        },
-                        (errorMessage) => {
-                            // Wrapper pre error callback
-                            onScanFailure(errorMessage);
-                        }
+                        onScanSuccess,
+                        () => {}
                     );
                     
-                    addDebugMsg('✅ QR scanner spustený s konfiguráciou: ' + JSON.stringify(cameraConfigs[i]));
-                    console.log('QR scanner spustený s konfiguráciou:', cameraConfigs[i]);
-                    resultsDiv.innerHTML = '<div style="padding: 10px; background-color: #d4edda; border-radius: 5px; color: #155724;">✅ Kamera pripravená! Namier na QR kód...</div>';
-                    addDebugMsg('📷 Kamera pripravená!');
-                    return; // Úspešne spustené
+                    isScanning = true;
+                    debug('Kamera spustená: ' + JSON.stringify(cameraConfigs[i]));
+                    setStatus('📷 Namier kameru na QR kód člena...', 'ready');
+                    return;
                     
                 } catch (err) {
-                    console.log('Pokus ' + (i + 1) + ' zlyhal:', err.message);
-                    
-                    // Ak už máme scanner, skúsime ho zastaviť
+                    debug('Pokus ' + (i + 1) + ' zlyhal: ' + err.message);
                     if (html5QrcodeScanner) {
-                        try {
-                            await html5QrcodeScanner.clear();
-                        } catch (clearErr) {
-                            console.log('Chyba pri cleanup:', clearErr);
-                        }
+                        try { await html5QrcodeScanner.clear(); } catch (e) {}
                         html5QrcodeScanner = null;
                     }
                     
-                    // Ak je to posledný pokus, zobraziť chybu
                     if (i === cameraConfigs.length - 1) {
-                        let errorMsg = '❌ Nepodarilo sa spustiť kameru.';
-                        
-                        if (err.name === 'NotAllowedError' || err.message.includes('Permission denied')) {
-                            errorMsg += '<br><br><strong>Kamera nemá povolený prístup.</strong><br><br>';
-                            errorMsg += '1. Klikni na ikonu kamery v adresnom riadku prehliadača<br>';
-                            errorMsg += '2. Povoľ prístup ku kamere<br>';
-                            errorMsg += '3. Obnov stránku (F5 alebo Cmd+R)';
-                        } else if (err.name === 'NotFoundError' || err.message.includes('No camera')) {
-                            errorMsg += '<br><br><strong>Kamera sa nenašla.</strong><br><br>';
-                            errorMsg += 'Skontroluj, či je kamera pripojená a funguje.';
+                        if (err.name === 'NotAllowedError') {
+                            setStatus('❌ Kamera nie je povolená. Povoľ prístup v prehliadači a obnov stránku.', 'error');
+                        } else if (err.name === 'NotFoundError') {
+                            setStatus('❌ Kamera sa nenašla. Skontroluj pripojenie kamery.', 'error');
                         } else {
-                            errorMsg += '<br><br>Chyba: ' + err.message;
+                            setStatus('❌ Chyba kamery: ' + err.message, 'error');
                         }
-                        
-                        resultsDiv.innerHTML = '<div style="padding: 15px; background-color: #f8d7da; border-radius: 5px; color: #721c24;">' + errorMsg + '</div>';
-                        isScanning = false;
                     }
                 }
             }
         }
         
-        // Funkcia na manuálne spustenie scanneru
-        window.restartScanner = function() {
-            if (html5QrcodeScanner) {
-                html5QrcodeScanner.clear().then(() => {
-                    html5QrcodeScanner = null;
-                    isScanning = false;
-                    startScanner();
-                }).catch(err => {
-                    console.error('Chyba pri cleanup:', err);
-                    html5QrcodeScanner = null;
-                    isScanning = false;
-                    startScanner();
-                });
-            } else {
-                startScanner();
+        // Počkať na načítanie knižnice
+        function init() {
+            if (typeof Html5Qrcode === 'undefined') {
+                debug('Čakám na Html5Qrcode knižnicu...');
+                setTimeout(init, 200);
+                return;
             }
-        };
-        
-        // Debug - zobraziť, že JavaScript sa načítal
-        addDebugMsg('✅ QR Scanner JavaScript sa načítal');
-        addDebugMsg('🔍 Html5Qrcode dostupný: ' + (typeof Html5Qrcode !== 'undefined'));
-        addDebugMsg('🔍 qr-reader element: ' + (document.getElementById('qr-reader') ? 'OK' : 'NIE JE'));
-        addDebugMsg('🔍 qr-reader-results element: ' + (document.getElementById('qr-reader-results') ? 'OK' : 'NIE JE'));
-        addDebugMsg('🔍 window.top: ' + (window.top ? 'OK' : 'NIE JE'));
-        addDebugMsg('🔍 window.parent: ' + (window.parent ? 'OK' : 'NIE JE'));
-        console.log('🔍 QR Scanner JavaScript sa načítal');
-        console.log('🔍 Html5Qrcode dostupný:', typeof Html5Qrcode !== 'undefined');
-        console.log('🔍 qr-reader element:', document.getElementById('qr-reader'));
-        console.log('🔍 qr-reader-results element:', document.getElementById('qr-reader-results'));
-        console.log('🔍 window:', window);
-        console.log('🔍 window.top:', window.top);
-        console.log('🔍 window.parent:', window.parent);
-        
-        // Spustiť scanner po načítaní stránky
-        function initScanner() {
-            addDebugMsg('🚀 initScanner volaná');
-            addDebugMsg('🔍 document.readyState: ' + document.readyState);
-            addDebugMsg('🔍 isScanning: ' + isScanning);
-            console.log('🔍 initScanner volaná');
-            console.log('🔍 document.readyState:', document.readyState);
-            console.log('🔍 isScanning:', isScanning);
-            if (!isScanning) {
-                addDebugMsg('▶️ Volám startScanner...');
-                console.log('🔍 Volám startScanner...');
-                startScanner();
-            } else {
-                addDebugMsg('⏸️ Scanner už beží, preskakujem');
-                console.log('🔍 Scanner už beží, preskakujem');
-            }
+            debug('Html5Qrcode knižnica načítaná');
+            startScanner();
         }
         
+        // Štart
         if (document.readyState === 'loading') {
-            addDebugMsg('⏳ DOM sa ešte načítava, čakám na DOMContentLoaded');
-            console.log('🔍 DOM sa ešte načítava, čakám na DOMContentLoaded');
-            document.addEventListener('DOMContentLoaded', function() {
-                addDebugMsg('✅ DOMContentLoaded - spúšťam scanner');
-                console.log('🔍 DOMContentLoaded - spúšťam scanner');
-                setTimeout(initScanner, 500);
-            });
+            document.addEventListener('DOMContentLoaded', init);
         } else {
-            // Malé oneskorenie pre istotu
-            addDebugMsg('✅ DOM už načítaný - spúšťam scanner');
-            console.log('🔍 DOM už načítaný - spúšťam scanner');
-            setTimeout(initScanner, 500);
+            setTimeout(init, 100);
         }
         
-        // Backup - spustiť aj po window.load
-        window.addEventListener('load', function() {
-            addDebugMsg('✅ window.load event - kontrolujem scanner');
-            console.log('🔍 window.load event - kontrolujem scanner');
-            if (!isScanning) {
-                addDebugMsg('▶️ Scanner nebeží, spúšťam...');
-                console.log('🔍 Scanner nebeží, spúšťam...');
-                setTimeout(initScanner, 1000);
-            }
-        });
-        
-        // Cleanup pri opustení stránky
+        // Cleanup
         window.addEventListener('beforeunload', () => {
             if (html5QrcodeScanner) {
-                html5QrcodeScanner.clear().catch(err => {
-                    console.error('Chyba pri cleanup:', err);
-                });
+                html5QrcodeScanner.stop().catch(() => {});
             }
         });
     })();
     </script>
     """
     
-    st.components.v1.html(scanner_html, height=600)
+    st.components.v1.html(scanner_html, height=500)
+    
+    # Listener pre postMessage (fallback ak window.top nefunguje)
+    st.markdown("""
+    <script>
+    window.addEventListener('message', function(event) {
+        if (event.data && event.data.type === 'QR_REDIRECT' && event.data.url) {
+            console.log('Prijatý QR_REDIRECT postMessage:', event.data.url);
+            window.location.href = event.data.url;
+        }
+    });
+    </script>
+    """, unsafe_allow_html=True)
+    
+    # Manuálny formulár ako záloha
+    st.markdown("---")
+    st.markdown("### ✍️ Manuálne prihlásenie")
+    st.caption("Ak QR skener nefunguje, môžeš prihlásiť člena manuálne:")
+    
+    with st.form("manual_attendance_form"):
+        manual_name = st.text_input("Meno a priezvisko", placeholder="Zadaj meno člena...")
+        manual_membership = st.selectbox("Typ členstva", options=MEMBERSHIP_TYPES, index=1)
+        manual_time = st.selectbox("Čas tréningu", options=TRAINING_TIMES, index=TRAINING_TIMES.index(get_next_training_time()) if get_next_training_time() in TRAINING_TIMES else 0)
+        
+        submitted = st.form_submit_button("✅ Prihlásiť", type="primary", use_container_width=True)
+        
+        if submitted:
+            if manual_name.strip():
+                if add_attendance(worksheet, manual_name.strip(), manual_membership, manual_time):
+                    st.success(f"✅ {manual_name} bol úspešne prihlásený!")
+                    st.balloons()
+                else:
+                    st.error("❌ Chyba pri prihlasovaní.")
+            else:
+                st.warning("⚠️ Prosím, zadaj meno.")
 
 
 def main():
