@@ -2304,17 +2304,26 @@ def main():
     # JavaScript listener pre postMessage z iframe (pre QR scanner)
     st.markdown("""
     <script>
+    console.log('🔍 PostMessage listener sa inicializuje...');
     // Počúvať na správy z iframe (QR scanner)
     window.addEventListener('message', function(event) {
+        console.log('📨 Správa prijatá:', event);
+        console.log('📨 event.data:', event.data);
+        console.log('📨 event.origin:', event.origin);
+        
         // Bezpečnostná kontrola - skontrolovať origin (voliteľné)
         // if (event.origin !== 'https://giantgym.streamlit.app') return;
         
         if (event.data && event.data.type === 'QR_SCAN_SUCCESS') {
-            console.log('QR scan success message received:', event.data.url);
+            console.log('✅ QR scan success message received:', event.data.url);
             // Presmerovať hlavnú stránku na novú URL
+            console.log('🌐 Presmerovávam na:', event.data.url);
             window.location.href = event.data.url;
+        } else {
+            console.log('⚠️ Správa neobsahuje QR_SCAN_SUCCESS:', event.data);
         }
     });
+    console.log('✅ PostMessage listener registrovaný');
     </script>
     """, unsafe_allow_html=True)
     
