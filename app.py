@@ -1984,12 +1984,13 @@ def scanner_view(worksheet):
                     addDebugMsg('🔗 baseUrl: ' + baseUrl);
                     console.log('baseUrl:', baseUrl);
                     
+                    // Vytvoriť URL bez dvojitého encodingu
                     const newParams = new URLSearchParams();
                     newParams.set('view', 'scanner');
-                    newParams.set('qr_name', encodeURIComponent(name));
-                    newParams.set('qr_membership', encodeURIComponent(membership));
+                    newParams.set('qr_name', name); // URLSearchParams už automaticky encoduje
+                    newParams.set('qr_membership', membership);
                     if (time) {
-                        newParams.set('qr_time', encodeURIComponent(time));
+                        newParams.set('qr_time', time);
                     }
                     newParams.set('qr_submit', '1');
                     
@@ -2322,28 +2323,37 @@ def main():
     """Hlavná funkcia aplikácie."""
     
     # JavaScript listener pre postMessage z iframe (pre QR scanner)
+    # Musí byť v každom view, nie len v main()
     st.markdown("""
     <script>
-    console.log('🔍 PostMessage listener sa inicializuje...');
-    // Počúvať na správy z iframe (QR scanner)
-    window.addEventListener('message', function(event) {
-        console.log('📨 Správa prijatá:', event);
-        console.log('📨 event.data:', event.data);
-        console.log('📨 event.origin:', event.origin);
-        
-        // Bezpečnostná kontrola - skontrolovať origin (voliteľné)
-        // if (event.origin !== 'https://giantgym.streamlit.app') return;
-        
-        if (event.data && event.data.type === 'QR_SCAN_SUCCESS') {
-            console.log('✅ QR scan success message received:', event.data.url);
-            // Presmerovať hlavnú stránku na novú URL
-            console.log('🌐 Presmerovávam na:', event.data.url);
-            window.location.href = event.data.url;
-        } else {
-            console.log('⚠️ Správa neobsahuje QR_SCAN_SUCCESS:', event.data);
+    (function() {
+        console.log('🔍 PostMessage listener sa inicializuje...');
+        // Počúvať na správy z iframe (QR scanner)
+        function handleMessage(event) {
+            console.log('📨 Správa prijatá:', event);
+            console.log('📨 event.data:', event.data);
+            console.log('📨 event.origin:', event.origin);
+            console.log('📨 event.source:', event.source);
+            
+            // Bezpečnostná kontrola - skontrolovať origin (voliteľné)
+            // if (event.origin !== 'https://giantgym.streamlit.app') return;
+            
+            if (event.data && event.data.type === 'QR_SCAN_SUCCESS') {
+                console.log('✅ QR scan success message received:', event.data.url);
+                // Presmerovať hlavnú stránku na novú URL
+                console.log('🌐 Presmerovávam na:', event.data.url);
+                window.location.href = event.data.url;
+            } else {
+                console.log('⚠️ Správa neobsahuje QR_SCAN_SUCCESS:', event.data);
+            }
         }
-    });
-    console.log('✅ PostMessage listener registrovaný');
+        
+        // Odstrániť existujúci listener, ak existuje
+        window.removeEventListener('message', handleMessage);
+        // Pridať nový listener
+        window.addEventListener('message', handleMessage);
+        console.log('✅ PostMessage listener registrovaný');
+    })();
     </script>
     """, unsafe_allow_html=True)
     
