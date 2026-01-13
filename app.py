@@ -1721,78 +1721,61 @@ def trainer_view(worksheet):
 
 
 def scanner_view(worksheet):
-    """Pohľad pre QR kód scanner v gyme - scanner + formulár."""
+    """Pohľad pre QR kód scanner v gyme - všetko v jednej karte."""
     
     st.title("📷 QR Kód Scanner - Gym")
-    st.markdown("**Naskenuj QR kód člena pre automatické prihlásenie**")
     
-    # Spracovať údaje z query params (ak prídu z QR scanneru)
+    # Inicializácia session state pre posledné prihlásenie
+    if 'last_scan_success' not in st.session_state:
+        st.session_state.last_scan_success = None
+    if 'last_scan_time' not in st.session_state:
+        st.session_state.last_scan_time = 0
+    
+    # Zobraziť posledné úspešné prihlásenie (ak bolo v posledných 5 sekundách)
+    import time
+    current_time = time.time()
+    if st.session_state.last_scan_success and (current_time - st.session_state.last_scan_time) < 5:
+        scan_data = st.session_state.last_scan_success
+        st.markdown(f"""
+        <div style="padding: 25px; border-radius: 15px; background: linear-gradient(135deg, #28a745 0%, #20c997 100%); color: white; text-align: center; margin: 10px 0 20px 0; animation: fadeIn 0.3s;">
+            <h1 style="margin: 0; font-size: 42px;">✅</h1>
+            <h2 style="margin: 8px 0; font-size: 24px;">{scan_data['name']}</h2>
+            <p style="margin: 5px 0; font-size: 16px; opacity: 0.95;">Úspešne prihlásený/á</p>
+            <p style="margin: 3px 0; font-size: 14px; opacity: 0.85;">{scan_data['membership']} • {scan_data['time']}</p>
+        </div>
+        <style>@keyframes fadeIn {{ from {{ opacity: 0; transform: translateY(-10px); }} to {{ opacity: 1; transform: translateY(0); }} }}</style>
+        """, unsafe_allow_html=True)
+    
+    # Spracovať údaje z query params
     query_params = st.query_params
     qr_name = unquote(query_params.get("qr_name", ""))
     qr_membership = unquote(query_params.get("qr_membership", ""))
     qr_time = unquote(query_params.get("qr_time", ""))
-    qr_auto = query_params.get("qr_auto", "0") == "1"
     
-    # Ak máme údaje z QR kódu
+    # Ak máme údaje z QR kódu - spracovať a uložiť
     if qr_name and qr_membership:
-        # Automaticky vybrať čas ak nie je zadaný
         if not qr_time:
             qr_time = get_next_training_time()
         
-        # Zobraziť údaje a automaticky odoslať
-        st.success(f"✅ **QR kód naskenovaný!**")
-        st.markdown(f"""
-        **Údaje z QR kódu:**
-        - 👤 **Meno:** {qr_name}
-        - 🏷️ **Členstvo:** {qr_membership}
-        - ⏰ **Čas tréningu:** {qr_time}
-        """)
-        
-        # Validácia údajov
+        # Validácia
         is_valid = qr_membership in MEMBERSHIP_TYPES and qr_time in TRAINING_TIMES
         
         if is_valid:
-            # Automaticky odoslať prihlásenie
+            # Uložiť dochádzku
             if add_attendance(worksheet, qr_name, qr_membership, qr_time):
+                # Uložiť do session state pre zobrazenie
+                st.session_state.last_scan_success = {
+                    'name': qr_name,
+                    'membership': qr_membership,
+                    'time': qr_time
+                }
+                st.session_state.last_scan_time = time.time()
                 st.balloons()
-                st.markdown(f"""
-                <div style="padding: 30px; border-radius: 15px; background: linear-gradient(135deg, #28a745 0%, #20c997 100%); color: white; text-align: center; margin: 20px 0;">
-                    <h1 style="margin: 0; font-size: 48px;">✅</h1>
-                    <h2 style="margin: 10px 0;">{qr_name}</h2>
-                    <p style="margin: 5px 0; font-size: 18px;">Úspešne prihlásený/á na tréning</p>
-                    <p style="margin: 5px 0; opacity: 0.9;">{qr_membership} • {qr_time}</p>
-                </div>
-                """, unsafe_allow_html=True)
-                
-                # Tlačidlo na ďalšie skenovanie
-                if st.button("📷 Skenovať ďalšieho člena", type="primary", use_container_width=True):
-                    st.query_params.clear()
-                    st.query_params["view"] = "scanner"
-                    st.rerun()
-                    
-                # Automaticky presmerovať po 3 sekundách
-                st.markdown("""
-                <script>
-                setTimeout(function() {
-                    window.location.href = window.location.pathname + '?view=scanner';
-                }, 3000);
-                </script>
-                <p style="text-align: center; color: #666; margin-top: 10px;">Automatické presmerovanie za 3 sekundy...</p>
-                """, unsafe_allow_html=True)
-            else:
-                st.error("❌ Chyba pri prihlasovaní. Skús to znova.")
-                if st.button("🔄 Skúsiť znova", type="primary", use_container_width=True):
-                    st.query_params.clear()
-                    st.query_params["view"] = "scanner"
-                    st.rerun()
-        else:
-            st.error("❌ Neplatné údaje v QR kóde. Skontroluj typ členstva a čas tréningu.")
-            if st.button("📷 Skenovať znova", type="primary", use_container_width=True):
-                st.query_params.clear()
-                st.query_params["view"] = "scanner"
-                st.rerun()
         
-        return  # Ukončiť funkciu, nechceme zobraziť scanner
+        # Vyčistiť query params a reloadnúť
+        st.query_params.clear()
+        st.query_params["view"] = "scanner"
+        st.rerun()
     
     st.markdown("---")
     
@@ -1810,11 +1793,12 @@ def scanner_view(worksheet):
     if st.button("🔄 Reštartovať Scanner", key="start_scanner", use_container_width=True):
         st.rerun()
     
-    # QR Scanner HTML s opraveným presmerovaním
+    # QR Scanner - zobrazuje úspech priamo v scanneri, automaticky reštartuje
     scanner_html = """
     <style>
         #qr-scanner-container {
             font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            position: relative;
         }
         #qr-scanner-status {
             padding: 12px 16px;
@@ -1822,10 +1806,11 @@ def scanner_view(worksheet):
             margin: 10px 0;
             font-size: 14px;
             text-align: center;
+            transition: all 0.3s ease;
         }
         .status-ready { background: #d4edda; color: #155724; }
         .status-scanning { background: #cce5ff; color: #004085; }
-        .status-success { background: #d4edda; color: #155724; }
+        .status-success { background: #28a745; color: white; font-size: 18px; padding: 20px; }
         .status-error { background: #f8d7da; color: #721c24; }
         .status-warning { background: #fff3cd; color: #856404; }
         #qr-reader {
@@ -1835,56 +1820,151 @@ def scanner_view(worksheet):
             border-radius: 12px;
             overflow: hidden;
         }
-        #qr-debug {
-            padding: 8px 12px;
+        #success-overlay {
+            display: none;
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background: rgba(40, 167, 69, 0.95);
+            border-radius: 12px;
+            z-index: 1000;
+            justify-content: center;
+            align-items: center;
+            flex-direction: column;
+            color: white;
+            text-align: center;
+            animation: fadeIn 0.3s ease;
+        }
+        #success-overlay.visible { display: flex; }
+        #success-overlay h1 { font-size: 64px; margin: 0; }
+        #success-overlay h2 { font-size: 28px; margin: 10px 0; }
+        #success-overlay p { font-size: 16px; opacity: 0.9; margin: 5px 0; }
+        #success-overlay .countdown { font-size: 14px; margin-top: 20px; opacity: 0.8; }
+        @keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
+        #scan-history {
+            margin-top: 15px;
+            padding: 10px;
             background: #f8f9fa;
-            border: 1px solid #dee2e6;
-            border-radius: 6px;
-            margin: 10px 0;
-            font-family: monospace;
-            font-size: 11px;
+            border-radius: 8px;
             max-height: 150px;
             overflow-y: auto;
-            display: none;
         }
-        #qr-debug.visible { display: block; }
+        .history-item {
+            padding: 8px 12px;
+            margin: 5px 0;
+            background: white;
+            border-radius: 6px;
+            border-left: 4px solid #28a745;
+            font-size: 14px;
+        }
+        .history-item .time { color: #666; font-size: 12px; }
     </style>
     
     <div id="qr-scanner-container">
         <div id="qr-scanner-status" class="status-scanning">⏳ Načítavam kameru...</div>
         <div id="qr-reader"></div>
-        <div id="qr-debug"></div>
+        
+        <!-- Overlay pre úspešné prihlásenie -->
+        <div id="success-overlay">
+            <h1>✅</h1>
+            <h2 id="success-name"></h2>
+            <p id="success-details"></p>
+            <p class="countdown">Pokračujem za <span id="countdown">3</span>s...</p>
+        </div>
+        
+        <!-- História prihlásení -->
+        <div id="scan-history">
+            <strong>📋 Dnes prihlásení:</strong>
+            <div id="history-list"></div>
+        </div>
     </div>
     
     <script src="https://unpkg.com/html5-qrcode@2.3.8/html5-qrcode.min.js"></script>
     <script>
     (function() {
         const statusDiv = document.getElementById('qr-scanner-status');
-        const debugDiv = document.getElementById('qr-debug');
+        const successOverlay = document.getElementById('success-overlay');
+        const successName = document.getElementById('success-name');
+        const successDetails = document.getElementById('success-details');
+        const countdownSpan = document.getElementById('countdown');
+        const historyList = document.getElementById('history-list');
+        
         let html5QrcodeScanner = null;
         let isScanning = false;
         let lastScannedCode = null;
         let isProcessing = false;
+        let scanHistory = [];
         
         function setStatus(message, type) {
             statusDiv.textContent = message;
             statusDiv.className = 'status-' + type;
         }
         
-        function debug(msg) {
-            const time = new Date().toLocaleTimeString();
-            debugDiv.innerHTML += '[' + time + '] ' + msg + '<br>';
-            debugDiv.scrollTop = debugDiv.scrollHeight;
-            console.log('[QR Scanner]', msg);
+        function playSuccessSound() {
+            try {
+                const audio = new Audio('data:audio/wav;base64,UklGRnoGAABXQVZFZm10IBAAAAABAAEAQB8AAEAfAAABAAgAZGF0YQoGAACBhYqFbF1fdJivrJBhNjVgodDbq2EcBj+a2teleVE2WImx0rtvKRY/f6/WsHpQOE14mr+4ZzkWO3Gd0bp2RTVXZ5O4t21AHi1eb7XDgUc2UluMsMN2NSQsV3OxvHI6LEpdhrC7eDEnJE1xr7lwNidHVYCtuHUvJiJHcK21ci0mQ1B7qrRxKyQfQm2rsXAqIx47aKuubikgGTdkqattJx4VM2KoqWsjHBEvX6eoaCEZDitcpKZmHxcKJ1mjpGQdFQYjVaCiYhsUAh9Tn6BgGRIAG0+eoF4XDwAXT5ydXRYNABNLm5tbFA0AEEmamVoTCwANRpiXWBEJAAo+mJZWEAgACD2WlFQPBgAGO5WTUQ4EAAQzk5FQDAIAAjCQkE4MAgACMI+QTgsA');
+                audio.volume = 0.5;
+                audio.play().catch(() => {});
+            } catch (e) {}
         }
         
-        // Toggle debug s Ctrl+D
-        document.addEventListener('keydown', function(e) {
-            if (e.ctrlKey && e.key === 'd') {
-                debugDiv.classList.toggle('visible');
-                e.preventDefault();
+        function showSuccess(name, membership, time) {
+            successName.textContent = name;
+            successDetails.textContent = membership + ' • ' + time;
+            successOverlay.classList.add('visible');
+            playSuccessSound();
+            
+            // Pridať do histórie
+            const now = new Date().toLocaleTimeString('sk-SK', {hour: '2-digit', minute: '2-digit'});
+            scanHistory.unshift({name, membership, time: now});
+            updateHistoryDisplay();
+            
+            // Odpočítavanie
+            let countdown = 3;
+            countdownSpan.textContent = countdown;
+            const countdownInterval = setInterval(() => {
+                countdown--;
+                countdownSpan.textContent = countdown;
+                if (countdown <= 0) {
+                    clearInterval(countdownInterval);
+                    successOverlay.classList.remove('visible');
+                    restartScanner();
+                }
+            }, 1000);
+        }
+        
+        function updateHistoryDisplay() {
+            historyList.innerHTML = scanHistory.slice(0, 10).map(item => 
+                '<div class="history-item"><strong>' + item.name + '</strong> <span class="time">' + item.time + '</span></div>'
+            ).join('');
+        }
+        
+        function saveAttendance(name, membership, time) {
+            // Otvoriť URL na pozadí pre uloženie do Google Sheets
+            const redirectParams = new URLSearchParams();
+            redirectParams.set('view', 'scanner');
+            redirectParams.set('qr_name', name);
+            redirectParams.set('qr_membership', membership);
+            if (time) redirectParams.set('qr_time', time);
+            redirectParams.set('qr_auto', '1');
+            
+            const saveUrl = 'https://giantgym.streamlit.app/?' + redirectParams.toString();
+            
+            // Pokus o otvorenie na pozadí
+            try {
+                const saveWindow = window.open(saveUrl, 'giantgym_save', 'width=400,height=300,left=10000,top=10000');
+                if (saveWindow) {
+                    // Zavrieť okno po 5 sekundách
+                    setTimeout(() => {
+                        try { saveWindow.close(); } catch(e) {}
+                    }, 5000);
+                }
+            } catch (e) {
+                console.log('Nepodarilo sa otvoriť okno na uloženie');
             }
-        });
+        }
         
         function onScanSuccess(decodedText) {
             if (isProcessing) return;
@@ -1893,131 +1973,61 @@ def scanner_view(worksheet):
             lastScannedCode = decodedText;
             isProcessing = true;
             
-            debug('QR naskenovaný: ' + decodedText.substring(0, 80) + '...');
-            
-            // Validácia - musí obsahovať giantgym URL
+            // Validácia
             if (!decodedText.includes('giantgym.streamlit.app')) {
-                setStatus('⚠️ Neplatný QR kód - nie je pre Giant Gym', 'warning');
-                debug('Neplatný QR kód');
+                setStatus('⚠️ Neplatný QR kód', 'warning');
                 setTimeout(() => {
                     isProcessing = false;
                     lastScannedCode = null;
                     setStatus('📷 Namier kameru na QR kód...', 'ready');
-                }, 3000);
+                }, 2000);
                 return;
             }
-            
-            setStatus('✅ QR kód rozpoznaný! Presmerovávam...', 'success');
-            debug('Platný QR kód, extrahujem údaje...');
             
             try {
                 const url = new URL(decodedText);
                 const params = new URLSearchParams(url.search);
-                
                 const name = params.get('name') || '';
                 const membership = params.get('membership') || '';
-                const time = params.get('time') || '';
-                
-                debug('Meno: ' + name);
-                debug('Členstvo: ' + membership);
-                debug('Čas: ' + time);
+                const time = params.get('time') || '17:00';
                 
                 if (!name || !membership) {
-                    setStatus('⚠️ QR kód neobsahuje potrebné údaje', 'warning');
-                    debug('Chýbajúce údaje v QR');
+                    setStatus('⚠️ Chýbajúce údaje v QR', 'warning');
                     setTimeout(() => {
                         isProcessing = false;
                         lastScannedCode = null;
                         setStatus('📷 Namier kameru na QR kód...', 'ready');
-                    }, 3000);
+                    }, 2000);
                     return;
                 }
                 
-                // Zastaviť scanner
+                // Zastaviť scanner počas zobrazovania úspechu
                 if (html5QrcodeScanner) {
                     html5QrcodeScanner.stop().catch(() => {});
+                    isScanning = false;
                 }
                 
-                // Vytvoriť URL pre presmerovanie
-                const redirectParams = new URLSearchParams();
-                redirectParams.set('view', 'scanner');
-                redirectParams.set('qr_name', name);
-                redirectParams.set('qr_membership', membership);
-                if (time) {
-                    redirectParams.set('qr_time', time);
-                }
-                redirectParams.set('qr_auto', '1');
+                // Zobraziť úspech
+                showSuccess(name, membership, time);
                 
-                const redirectUrl = 'https://giantgym.streamlit.app/?' + redirectParams.toString();
-                debug('Cieľová URL: ' + redirectUrl);
-                
-                // HLAVNÁ METÓDA: Otvoriť v novom tabe pomocou window.open
-                // Toto by malo fungovať aj v sandboxed iframe
-                debug('Otváram nový tab...');
-                const newWindow = window.open(redirectUrl, '_blank');
-                
-                if (newWindow) {
-                    debug('Nový tab otvorený úspešne!');
-                    setStatus('✅ Otvorený nový tab s prihlásením! Skontroluj nový tab.', 'success');
-                    
-                    // Zobraziť info
-                    const container = document.getElementById('qr-scanner-container');
-                    const infoDiv = document.createElement('div');
-                    infoDiv.innerHTML = '<div style="margin-top: 20px; padding: 20px; background: linear-gradient(135deg, #e3f2fd 0%, #bbdefb 100%); border-radius: 12px; text-align: center; border: 2px solid #2196f3;">' +
-                        '<p style="margin: 0 0 10px 0; font-size: 18px; color: #1565c0;"><strong>✅ ' + name + '</strong></p>' +
-                        '<p style="margin: 0; color: #1976d2;">Prihlásenie sa otvorilo v novom tabe.<br>Prepni sa na nový tab pre dokončenie.</p>' +
-                        '</div>';
-                    container.appendChild(infoDiv);
-                } else {
-                    // Popup bol zablokovaný - zobraziť manuálny odkaz
-                    debug('Popup zablokovaný, zobrazujem manuálny odkaz');
-                    setStatus('⚠️ Popup zablokovaný. Skopíruj URL alebo klikni na odkaz:', 'warning');
-                    
-                    const container = document.getElementById('qr-scanner-container');
-                    const linkDiv = document.createElement('div');
-                    linkDiv.style.cssText = 'margin-top: 20px; padding: 20px; background: linear-gradient(135deg, #e8f5e9 0%, #c8e6c9 100%); border-radius: 12px; text-align: center; border: 2px solid #4caf50;';
-                    
-                    const title = document.createElement('p');
-                    title.style.cssText = 'margin: 0 0 15px 0; font-size: 16px; color: #2e7d32;';
-                    title.innerHTML = '<strong>✅ QR kód bol naskenovaný!</strong>';
-                    linkDiv.appendChild(title);
-                    
-                    const info = document.createElement('p');
-                    info.style.cssText = 'margin: 0 0 15px 0; color: #388e3c;';
-                    info.textContent = name + ' • ' + membership;
-                    linkDiv.appendChild(info);
-                    
-                    const urlInput = document.createElement('input');
-                    urlInput.type = 'text';
-                    urlInput.value = redirectUrl;
-                    urlInput.readOnly = true;
-                    urlInput.style.cssText = 'width: 100%; padding: 10px; border: 1px solid #ccc; border-radius: 4px; font-size: 11px; margin-bottom: 15px; cursor: pointer; box-sizing: border-box;';
-                    urlInput.title = 'Klikni pre skopírovanie';
-                    urlInput.onclick = function() { this.select(); };
-                    linkDiv.appendChild(urlInput);
-                    
-                    const br = document.createElement('br');
-                    linkDiv.appendChild(br);
-                    
-                    const link = document.createElement('a');
-                    link.href = redirectUrl;
-                    link.target = '_blank';
-                    link.style.cssText = 'display: inline-block; padding: 15px 30px; background: linear-gradient(135deg, #4caf50 0%, #45a049 100%); color: white; text-decoration: none; border-radius: 8px; font-weight: bold; font-size: 18px; box-shadow: 0 4px 15px rgba(76, 175, 80, 0.4);';
-                    link.textContent = '📋 OTVORIŤ V NOVOM TABE';
-                    linkDiv.appendChild(link);
-                    
-                    container.appendChild(linkDiv);
-                }
+                // Uložiť dochádzku na pozadí
+                saveAttendance(name, membership, time);
                 
             } catch (e) {
-                debug('Chyba: ' + e.message);
-                setStatus('❌ Chyba pri spracovaní QR kódu', 'error');
+                setStatus('❌ Chyba pri spracovaní', 'error');
                 setTimeout(() => {
                     isProcessing = false;
                     lastScannedCode = null;
                     setStatus('📷 Namier kameru na QR kód...', 'ready');
-                }, 3000);
+                }, 2000);
             }
+        }
+        
+        function restartScanner() {
+            isProcessing = false;
+            lastScannedCode = null;
+            isScanning = false;
+            startScanner();
         }
         
         async function startScanner() {
