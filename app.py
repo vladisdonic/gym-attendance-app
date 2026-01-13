@@ -1193,9 +1193,9 @@ def scanner_view(worksheet):
                 st.balloons()
         
         # Vyčistiť query params a reloadnúť
-            st.query_params.clear()
+        st.query_params.clear()
         st.query_params["view"] = "scanner"
-            st.rerun()
+        st.rerun()
     
     st.markdown("---")
     
