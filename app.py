@@ -1939,43 +1939,73 @@ def scanner_view(worksheet):
                 }
                 
                 // Vytvoriť URL pre presmerovanie
-                // KĽÚČOVÁ OPRAVA: Použiť formulár s target="_top" na obídenie cross-origin obmedzení
-                const baseUrl = 'https://giantgym.streamlit.app/';
-                
-                debug('Vytváram presmerovací formulár...');
-                debug('Meno: ' + name);
-                debug('Členstvo: ' + membership);
-                debug('Čas: ' + time);
-                
-                // Vytvoriť skrytý formulár a odoslať ho
-                const form = document.createElement('form');
-                form.method = 'GET';
-                form.action = baseUrl;
-                form.target = '_top';  // Toto je kľúčové - presmeruje celú stránku
-                form.style.display = 'none';
-                
-                // Pridať hidden inputy pre parametre
-                const addInput = (name, value) => {
-                    const input = document.createElement('input');
-                    input.type = 'hidden';
-                    input.name = name;
-                    input.value = value;
-                    form.appendChild(input);
-                };
-                
-                addInput('view', 'scanner');
-                addInput('qr_name', name);
-                addInput('qr_membership', membership);
+                const redirectParams = new URLSearchParams();
+                redirectParams.set('view', 'scanner');
+                redirectParams.set('qr_name', name);
+                redirectParams.set('qr_membership', membership);
                 if (time) {
-                    addInput('qr_time', time);
+                    redirectParams.set('qr_time', time);
                 }
-                addInput('qr_auto', '1');
+                redirectParams.set('qr_auto', '1');
                 
-                document.body.appendChild(form);
-                debug('Formulár vytvorený, odosielam...');
+                const redirectUrl = 'https://giantgym.streamlit.app/?' + redirectParams.toString();
+                debug('Cieľová URL: ' + redirectUrl);
                 
-                // Odoslať formulár
-                form.submit();
+                // METÓDA 1: Anchor click s target="_top" (najspoľahlivejšia)
+                try {
+                    debug('Skúšam anchor click...');
+                    const a = document.createElement('a');
+                    a.href = redirectUrl;
+                    a.target = '_top';
+                    a.rel = 'noopener';
+                    a.style.display = 'none';
+                    document.body.appendChild(a);
+                    a.click();
+                    document.body.removeChild(a);
+                    debug('Anchor click odoslaný');
+                    
+                    // Ak sa do 2 sekúnd nič nestane, skús ďalšiu metódu
+                    setTimeout(() => {
+                        debug('Anchor click možno nezafungoval, skúšam form submit...');
+                        
+                        // METÓDA 2: Form submission s target="_top"
+                        const form = document.createElement('form');
+                        form.method = 'GET';
+                        form.action = 'https://giantgym.streamlit.app/';
+                        form.target = '_top';
+                        form.style.display = 'none';
+                        
+                        const addInput = (n, v) => {
+                            const input = document.createElement('input');
+                            input.type = 'hidden';
+                            input.name = n;
+                            input.value = v;
+                            form.appendChild(input);
+                        };
+                        
+                        addInput('view', 'scanner');
+                        addInput('qr_name', name);
+                        addInput('qr_membership', membership);
+                        if (time) addInput('qr_time', time);
+                        addInput('qr_auto', '1');
+                        
+                        document.body.appendChild(form);
+                        form.submit();
+                    }, 2000);
+                    
+                } catch (e) {
+                    debug('Chyba pri anchor click: ' + e.message);
+                    
+                    // METÓDA 3: Zobraziť odkaz pre manuálne kliknutie
+                    setStatus('⚠️ Automatické presmerovanie nefunguje. Klikni na odkaz nižšie:', 'warning');
+                    const container = document.getElementById('qr-scanner-container');
+                    const linkDiv = document.createElement('div');
+                    linkDiv.innerHTML = '<div style="margin-top: 20px; padding: 15px; background: #e7f3ff; border-radius: 8px; text-align: center;">' +
+                        '<p style="margin: 0 0 10px 0;"><strong>Klikni sem pre dokončenie prihlásenia:</strong></p>' +
+                        '<a href="' + redirectUrl + '" target="_top" style="display: inline-block; padding: 12px 24px; background: #28a745; color: white; text-decoration: none; border-radius: 6px; font-weight: bold;">✅ Prihlásiť ' + name + '</a>' +
+                        '</div>';
+                    container.appendChild(linkDiv);
+                }
                 
             } catch (e) {
                 debug('Chyba: ' + e.message);
