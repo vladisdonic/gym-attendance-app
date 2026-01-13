@@ -1817,6 +1817,25 @@ def scanner_view(worksheet):
     </script>
     """, unsafe_allow_html=True)
     
+    # Spracovať údaje z query params (ak prídu cez postMessage a reload)
+    query_params = st.query_params
+    qr_submit = query_params.get("qr_submit", "0") == "1"
+    if qr_submit and not st.session_state.get('qr_scanned_data'):
+        # Extrahovať údaje z query params a uložiť do session state
+        name = unquote(query_params.get("qr_name", ""))
+        membership = unquote(query_params.get("qr_membership", ""))
+        time = unquote(query_params.get("qr_time", ""))
+        
+        if name and membership:
+            st.session_state['qr_scanned_data'] = {
+                'name': name,
+                'membership': membership,
+                'time': time
+            }
+            # Vyčistiť query params
+            st.query_params.clear()
+            st.rerun()
+    
     # Automaticky spustiť scanner po úspešnom prihlásení
     if st.session_state.get('restart_scanner_after_success'):
         st.markdown("""
