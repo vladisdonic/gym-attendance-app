@@ -397,7 +397,7 @@ def participant_view(worksheet, query_params=None):
                 mime="image/png",
                 use_container_width=True
             )
-    
+            
     st.markdown("---")
     
     # Formulár na prihlásenie
