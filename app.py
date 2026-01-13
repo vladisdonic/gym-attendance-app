@@ -963,7 +963,7 @@ def participant_view(worksheet, query_params=None):
             
         # Zobrazenie vygenerovanej URL pre NFC
         if st.session_state.get('personal_nfc_url') and not st.session_state.get('personal_qr_code'):
-            st.markdown("---")
+        st.markdown("---")
             st.success("✅ **URL pre NFC tag vygenerovaná!**")
             st.markdown("### 🔗 Tvoja osobná URL:")
             st.code(st.session_state['personal_nfc_url'], language="text")
@@ -1959,6 +1959,37 @@ def scanner_view(worksheet):
             use_container_width=True,
             type="primary"
         )
+        
+        # Automatické odoslanie, ak boli údaje naskenované
+        auto_submit = st.session_state.get('auto_submit_scanner', False)
+        if auto_submit and name.strip() and membership and training_time:
+            # Odoslať automaticky
+            client_timestamp = client_time if client_time else None
+            if add_attendance(worksheet, name.strip(), membership, training_time, client_timestamp):
+                st.success(f"🎉 **{name.strip()}** úspešne prihlásený/á na tréning **{training_time}**!")
+                st.balloons()
+                
+                # Vyčistiť session state
+                if 'qr_scanned_data' in st.session_state:
+                    del st.session_state['qr_scanned_data']
+                if 'auto_submit_scanner' in st.session_state:
+                    del st.session_state['auto_submit_scanner']
+                st.session_state['restart_scanner_after_success'] = True
+                
+                # Rerun po 2 sekundách
+                st.markdown("""
+                <script>
+                setTimeout(function() {
+                    if (window.restartScanner) {
+                        window.restartScanner();
+                    }
+                }, 2000);
+                </script>
+                """, unsafe_allow_html=True)
+            else:
+                st.error("❌ Chyba pri prihlásení. Skús znova.")
+                if 'auto_submit_scanner' in st.session_state:
+                    del st.session_state['auto_submit_scanner']
         
         if submitted:
             # Kontrola honeypot poľa
