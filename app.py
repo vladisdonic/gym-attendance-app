@@ -1789,6 +1789,34 @@ def scanner_view(worksheet):
     4. **Automaticky sa rozpozná a prihlási na pozadí** (zobrazí sa len potvrdenie)
     """)
     
+    # JavaScript listener pre postMessage z iframe (pre QR scanner) - musí byť aj tu
+    st.markdown("""
+    <script>
+    (function() {
+        console.log('🔍 PostMessage listener sa inicializuje v scanner_view...');
+        // Počúvať na správy z iframe (QR scanner)
+        function handleMessage(event) {
+            console.log('📨 Správa prijatá v scanner_view:', event);
+            console.log('📨 event.data:', event.data);
+            console.log('📨 event.origin:', event.origin);
+            
+            if (event.data && event.data.type === 'QR_SCAN_SUCCESS') {
+                console.log('✅ QR scan success message received v scanner_view:', event.data.url);
+                // Presmerovať hlavnú stránku na novú URL
+                console.log('🌐 Presmerovávam na:', event.data.url);
+                window.location.href = event.data.url;
+            }
+        }
+        
+        // Odstrániť existujúci listener, ak existuje
+        window.removeEventListener('message', handleMessage);
+        // Pridať nový listener
+        window.addEventListener('message', handleMessage);
+        console.log('✅ PostMessage listener registrovaný v scanner_view');
+    })();
+    </script>
+    """, unsafe_allow_html=True)
+    
     # Automaticky spustiť scanner po úspešnom prihlásení
     if st.session_state.get('restart_scanner_after_success'):
         st.markdown("""
