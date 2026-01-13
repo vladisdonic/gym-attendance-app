@@ -1,6 +1,6 @@
 """
 Aplikácia na evidenciu účasti na tréningoch
-- Účastníci sa prihlasujú cez QR kód/NFC
+- Účastníci sa prihlasujú cez QR kód
 - Tréner vidí počet prihlásených
 - Dáta sa ukladajú do Google Sheets
 """
@@ -312,505 +312,7 @@ def participant_view(worksheet, query_params=None):
     if query_params is None:
         query_params = st.query_params
     
-    # Detekcia NFC módu (nový spôsob)
-    nfc_mode = query_params.get("nfc", "0") == "1"
-    
-    # NFC mód - upozornenie a pokyny (localStorage/cookies nefungujú kvôli cross-origin obmedzeniu)
-    if nfc_mode:
-        st.warning("⚠️ **NFC tag bez osobných údajov**")
-        st.markdown("""
-        **Tento NFC tag neobsahuje tvoje údaje v URL.**
-        
-        **Ako to vyriešiť:**
-        1. 👇 Otvor sekciu **"Vygenerovať osobnú URL"** nižšie
-        2. Zadaj svoje meno a typ členstva
-        3. Klikni na **"Generovať URL pre NFC tag"**
-        4. Skopíruj vygenerovanú URL
-        5. Naprogramuj NFC tag s touto URL pomocou aplikácie **NFC Tools**
-        
-        **✅ Potom bude NFC tag fungovať automaticky!**
-        """)
-        st.markdown("---")
-    
-    # STARÉ NFC riešenie - DEAKTIVOVANÉ (nefunguje kvôli cross-origin obmedzeniu Streamlit iframe)
-    if False:
-        # Použijeme components.html namiesto markdown, aby sa JavaScript správne spustil
-        html_code = """
-        <script>
-        (function() {
-            const DB_NAME = 'GiantGymDB';
-            const DB_VERSION = 1;
-            const STORE_NAME = 'userData';
-            
-            // Funkcia na inicializáciu IndexedDB s retry logikou
-            function initDB() {
-                return new Promise((resolve, reject) => {
-                    if (!window.indexedDB) {
-                        reject(new Error('IndexedDB nie je podporovaný'));
-                        return;
-                    }
-                    
-                    const request = indexedDB.open(DB_NAME, DB_VERSION);
-                    
-                    request.onerror = () => {
-                        console.warn('IndexedDB open error:', request.error);
-                        reject(request.error);
-                    };
-                    
-                    request.onsuccess = () => {
-                        resolve(request.result);
-                    };
-                    
-                    request.onupgradeneeded = (event) => {
-                        const db = event.target.result;
-                        if (!db.objectStoreNames.contains(STORE_NAME)) {
-                            db.createObjectStore(STORE_NAME, { keyPath: 'id' });
-                        }
-                    };
-                    
-                    request.onblocked = () => {
-                        console.warn('IndexedDB je blokovaný - možno je otvorený v inej záložke');
-                    };
-                });
-            }
-            
-            // Funkcia na načítanie údajov z IndexedDB s retry
-            async function loadFromIndexedDB(retries = 2) {
-                for (let i = 0; i <= retries; i++) {
-                try {
-                    const db = await initDB();
-                    return new Promise((resolve, reject) => {
-                        const transaction = db.transaction([STORE_NAME], 'readonly');
-                        const store = transaction.objectStore(STORE_NAME);
-                        const request = store.get(1);
-                        
-                        request.onsuccess = () => {
-                            const data = request.result;
-                            if (data && data.name && data.membership) {
-                                resolve({ name: data.name, membership: data.membership });
-                            } else {
-                                resolve(null);
-                            }
-                        };
-                            request.onerror = () => {
-                                if (i === retries) {
-                                    reject(request.error);
-                                } else {
-                                    setTimeout(() => resolve(loadFromIndexedDB(retries - 1)), 100);
-                                }
-                            };
-                    });
-                } catch (e) {
-                        if (i === retries) {
-                            console.log('IndexedDB nie je dostupné po', retries + 1, 'pokusoch:', e);
-                    return null;
-                }
-                        await new Promise(resolve => setTimeout(resolve, 100));
-                    }
-                }
-                return null;
-            }
-            
-            // Funkcia na načítanie cookie
-            function getCookie(name) {
-                try {
-                const value = `; ${document.cookie}`;
-                const parts = value.split(`; ${name}=`);
-                    if (parts.length === 2) {
-                        const decoded = decodeURIComponent(parts.pop().split(';').shift());
-                        return decoded || '';
-                    }
-                } catch (e) {
-                    console.warn('Chyba pri načítaní cookie:', e);
-                }
-                return '';
-            }
-            
-            // Funkcia na uloženie údajov do IndexedDB
-            async function saveToIndexedDB(name, membership) {
-                try {
-                    const db = await initDB();
-                    return new Promise((resolve, reject) => {
-                        const transaction = db.transaction([STORE_NAME], 'readwrite');
-                        const store = transaction.objectStore(STORE_NAME);
-                        const request = store.put({ id: 1, name: name, membership: membership });
-                        
-                        request.onsuccess = () => resolve();
-                        request.onerror = () => reject(request.error);
-                    });
-                } catch (e) {
-                    console.log('Chyba pri ukladaní do IndexedDB:', e);
-                    throw e;
-                }
-            }
-            
-            // Funkcia na uloženie cookie (optimalizované pre Safari)
-            function setCookie(name, value, days = 365) {
-                try {
-                const encodedValue = encodeURIComponent(value);
-                const expires = new Date();
-                expires.setTime(expires.getTime() + (days * 24 * 60 * 60 * 1000));
-                    
-                    // Pre Safari: použiť Secure len ak je HTTPS, inak môže byť problém
-                    const isSecure = window.location.protocol === 'https:';
-                    const secureFlag = isSecure ? ';Secure' : '';
-                    
-                    // SameSite=Lax funguje lepšie v Safari ako Strict
-                    document.cookie = `${name}=${encodedValue};expires=${expires.toUTCString()};path=/;SameSite=Lax${secureFlag}`;
-                } catch (e) {
-                    console.warn('Chyba pri ukladaní cookie:', e);
-                }
-            }
-            
-            // Funkcia na načítanie údajov z localStorage (najspoľahlivejšie pre Safari)
-            function loadFromLocalStorage() {
-                try {
-                    const name = localStorage.getItem('gym_name');
-                    const membership = localStorage.getItem('gym_membership');
-                    if (name && membership) {
-                        return { name: name, membership: membership };
-                    }
-                } catch (e) {
-                    console.warn('localStorage nie je dostupné:', e);
-                }
-                return null;
-            }
-            
-            // Funkcia na načítanie údajov z sessionStorage (funguje aj v privátnom režime Safari)
-            function loadFromSessionStorage() {
-                try {
-                    const name = sessionStorage.getItem('gym_name');
-                    const membership = sessionStorage.getItem('gym_membership');
-                    if (name && membership) {
-                        return { name: name, membership: membership };
-                    }
-                } catch (e) {
-                    console.warn('sessionStorage nie je dostupné:', e);
-                }
-                return null;
-            }
-            
-            // Funkcia na uloženie údajov do všetkých úložísk
-            async function saveToAllStorages(name, membership) {
-                // localStorage (primárne pre Safari)
-                try {
-                    localStorage.setItem('gym_name', name);
-                    localStorage.setItem('gym_membership', membership);
-                    console.log('✅ Údaje uložené do localStorage');
-                } catch (e) {
-                    console.warn('⚠️ localStorage nie je dostupné:', e);
-                }
-                
-                // sessionStorage (záložné)
-                try {
-                    sessionStorage.setItem('gym_name', name);
-                    sessionStorage.setItem('gym_membership', membership);
-                    console.log('✅ Údaje uložené do sessionStorage');
-                } catch (e) {
-                    console.warn('⚠️ sessionStorage nie je dostupné:', e);
-                }
-                
-                // IndexedDB (záložné)
-                try {
-                    await saveToIndexedDB(name, membership);
-                    console.log('✅ Údaje uložené do IndexedDB');
-                } catch (e) {
-                    console.warn('⚠️ IndexedDB nie je dostupné:', e);
-                }
-                
-                // Cookies (záložné)
-                try {
-                    setCookie('gym_name', name);
-                    setCookie('gym_membership', membership);
-                    console.log('✅ Údaje uložené do cookies');
-                } catch (e) {
-                    console.warn('⚠️ Cookies nie sú dostupné:', e);
-                }
-            }
-            
-            // Počkáme, kým sa stránka úplne načíta (pre Safari kompatibilitu)
-            async function initNFC() {
-                console.log('🚀 NFC Mode - Inicializácia začala');
-                
-                // Počkať na window.load event (dôležité pre Safari)
-                if (document.readyState === 'loading') {
-                    await new Promise(resolve => {
-                        window.addEventListener('load', resolve, { once: true });
-                    });
-                }
-                
-                // Malé oneskorenie pre istotu
-                await new Promise(resolve => setTimeout(resolve, 100));
-                
-                console.log('🚀 NFC Mode - Začínam processNFC');
-                await processNFC();
-            }
-            
-            // Uložiť referenciu na funkciu do window pre debug
-            window.debugGymApp = {
-                loadFromIndexedDB: loadFromIndexedDB,
-                loadFromLocalStorage: loadFromLocalStorage,
-                loadFromSessionStorage: loadFromSessionStorage,
-                getCookie: getCookie,
-                initDB: initDB,
-                testStorage: async function() {
-                    console.log('=== TEST ÚLOŽISK ===');
-                    console.log('IndexedDB podporovaný:', !!window.indexedDB);
-                    console.log('localStorage dostupný:', typeof(Storage) !== "undefined");
-                    console.log('sessionStorage dostupný:', typeof(Storage) !== "undefined");
-                    console.log('Cookies:', document.cookie);
-                    
-                    try {
-                        const data = await loadFromIndexedDB();
-                        console.log('IndexedDB dáta:', data);
-                    } catch (e) {
-                        console.error('IndexedDB chyba:', e);
-                    }
-                    
-                    try {
-                        const localData = loadFromLocalStorage();
-                        console.log('localStorage dáta:', localData);
-                    } catch (e) {
-                        console.error('localStorage chyba:', e);
-                    }
-                    
-                    try {
-                        const sessionData = loadFromSessionStorage();
-                        console.log('sessionStorage dáta:', sessionData);
-                    } catch (e) {
-                        console.error('sessionStorage chyba:', e);
-                    }
-                    
-                    const cookieName = getCookie('gym_name');
-                    const cookieMembership = getCookie('gym_membership');
-                    console.log('Cookies dáta:', { name: cookieName, membership: cookieMembership });
-                }
-            };
-            
-            // Spustiť inicializáciu
-            if (document.readyState === 'loading') {
-                document.addEventListener('DOMContentLoaded', () => {
-                    console.log('📱 DOMContentLoaded - spúšťam NFC');
-                    initNFC().catch(e => {
-                        console.error('❌ Chyba pri inicializácii NFC:', e);
-                        alert('Chyba pri načítaní údajov: ' + e.message);
-                    });
-                });
-            } else {
-                console.log('📱 DOM už načítaný - spúšťam NFC');
-                initNFC().catch(e => {
-                    console.error('❌ Chyba pri inicializácii NFC:', e);
-                    alert('Chyba pri načítaní údajov: ' + e.message);
-                });
-            }
-            
-            async function processNFC() {
-                try {
-                    console.log('NFC Mode - Začínam načítavanie údajov...');
-                    let userData = null;
-                    let storageSource = '';
-                    
-                    // PRIMÁRNE: localStorage (najspoľahlivejšie pre Safari na iPhone)
-                    try {
-                        console.log('NFC Mode - Pokúšam sa načítať z localStorage...');
-                        userData = loadFromLocalStorage();
-                        if (userData && userData.name && userData.membership) {
-                            storageSource = 'localStorage';
-                            console.log('NFC Mode - ✅ Načítané z localStorage:', userData);
-                        }
-                    } catch (e) {
-                        console.warn('NFC Mode - ⚠️ localStorage nie je dostupné:', e);
-                    }
-                    
-                    // ZÁLOŽNÉ 1: sessionStorage (funguje aj v privátnom režime Safari)
-                    if (!userData || !userData.name || !userData.membership) {
-                        try {
-                            console.log('NFC Mode - Pokúšam sa načítať z sessionStorage...');
-                            userData = loadFromSessionStorage();
-                            if (userData && userData.name && userData.membership) {
-                                storageSource = 'sessionStorage';
-                                console.log('NFC Mode - ✅ Načítané z sessionStorage:', userData);
-                            }
-                        } catch (e) {
-                            console.warn('NFC Mode - ⚠️ sessionStorage nie je dostupné:', e);
-                        }
-                    }
-                    
-                    // ZÁLOŽNÉ 2: IndexedDB
-                    if (!userData || !userData.name || !userData.membership) {
-                    try {
-                        console.log('NFC Mode - Pokúšam sa načítať z IndexedDB...');
-                        userData = await loadFromIndexedDB();
-                        if (userData && userData.name && userData.membership) {
-                                storageSource = 'IndexedDB';
-                            console.log('NFC Mode - ✅ Načítané z IndexedDB:', userData);
-                        }
-                    } catch (e) {
-                            console.warn('NFC Mode - ⚠️ IndexedDB nie je dostupné:', e);
-                        }
-                    }
-                    
-                    // ZÁLOŽNÉ 3: Cookies
-                    if (!userData || !userData.name || !userData.membership) {
-                        console.log('NFC Mode - Pokúšam sa načítať z cookies...');
-                        const cookieName = getCookie('gym_name');
-                        const cookieMembership = getCookie('gym_membership');
-                        if (cookieName && cookieMembership) {
-                            userData = {
-                                name: cookieName,
-                                membership: cookieMembership
-                            };
-                            storageSource = 'cookies';
-                            console.log('NFC Mode - ✅ Načítané z cookies:', userData);
-                        }
-                    }
-                    
-                    // Ak sa údaje našli, migrujeme ich do všetkých úložísk pre budúce použitie
-                    if (userData && userData.name && userData.membership && storageSource !== 'localStorage') {
-                        try {
-                            console.log('NFC Mode - Migrujem údaje do localStorage...');
-                            await saveToAllStorages(userData.name, userData.membership);
-                                    console.log('NFC Mode - ✅ Migrácia úspešná');
-                                } catch (e) {
-                            console.warn('NFC Mode - ⚠️ Chyba pri migrácii:', e);
-                        }
-                    }
-                    
-                    if (!userData || !userData.name || !userData.membership) {
-                        console.error('NFC Mode - ❌ Údaje neboli nájdené v žiadnom úložisku');
-                        console.log('NFC Mode - Debug: IndexedDB podporovaný:', !!window.indexedDB);
-                        console.log('NFC Mode - Debug: localStorage dostupný:', typeof(Storage) !== "undefined");
-                        console.log('NFC Mode - Debug: sessionStorage dostupný:', typeof(Storage) !== "undefined");
-                        console.log('NFC Mode - Debug: Cookies:', document.cookie);
-                        
-                        // Zobraziť alert s inštrukciami
-                        alert('⚠️ Údaje nie sú uložené!\\n\\nProsím:\\n1. Choď na https://giantgym.streamlit.app/?view=participant\\n2. Klikni na "💾 Uložiť údaje pre NFC"\\n3. Vyplň údaje a ulož ich\\n4. Potom skús znova naskenovať NFC tag\\n\\nPre debug: Otvor konzolu a spusti window.debugGymApp.testStorage()');
-                        return;
-                    }
-                    
-                    console.log('NFC Mode - ✅ Finálne načítané údaje z', storageSource + ':', userData);
-                    
-                    // Automatický výber času tréningu podľa aktuálneho času
-                    const now = new Date();
-                    const currentHour = now.getHours();
-                    const currentMinute = now.getMinutes();
-                    const currentTimeMinutes = currentHour * 60 + currentMinute;
-                    
-                    let selectedTime = '9:00'; // Predvolená hodnota
-                    
-                    // Automatický výber času tréningu podľa aktuálneho času
-                    // 00:00 - 09:59 → 9:00 (ranný tréning)
-                    // 10:00 - 17:59 → 17:00 (popoludňajší tréning)
-                    // 18:00 - 23:59 → 18:30 (večerný tréning)
-                    const currentHour = now.getHours();
-                    
-                    if (currentHour < 10) {
-                        selectedTime = '9:00';
-                    } else if (currentHour < 18) {
-                        selectedTime = '17:00';
-                    } else {
-                        selectedTime = '18:30';
-                    }
-                    
-                    console.log('NFC Mode - Vybratý čas:', selectedTime);
-                    
-                    // Ak sú všetky údaje dostupné, presmeruj s parametrami
-                    if (userData.name && userData.membership) {
-                        // Použiť window.top pre presmerovanie celej stránky (nie len iframe)
-                        const topWindow = window.top || window.parent || window;
-                        const baseUrl = 'https://giantgym.streamlit.app/';
-                        const params = new URLSearchParams({
-                            view: 'participant',
-                            name: userData.name,
-                            membership: userData.membership,
-                            time: selectedTime, // Automaticky vybraný čas
-                            auto: '1'
-                        });
-                        const newUrl = baseUrl + '?' + params.toString();
-                        console.log('NFC Mode - Presmerovanie na:', newUrl);
-                        try {
-                            topWindow.location.href = newUrl;
-                        } catch (e) {
-                            // Ak window.top nie je dostupný (cross-origin), skúsime window.location
-                            console.log('NFC Mode - window.top nie je dostupný, používam window.location');
-                        window.location.href = newUrl;
-                        }
-                    } else {
-                        console.log('NFC Mode - Údaje chýbajú, pokračujeme normálne');
-                    }
-                } catch (e) {
-                    console.error('NFC Mode - Chyba:', e);
-                    alert('Chyba pri načítaní údajov: ' + e.message);
-                }
-            }
-        })();
-        </script>
-        <style>
-        /* Skryť akýkoľvek zobrazený JavaScript kód */
-        script {
-            display: none !important;
-            visibility: hidden !important;
-        }
-        </style>
-        <script>
-        // Skryť zobrazený JavaScript kód pomocou JavaScript (CSS selektory :has-text a :contains neexistujú)
-        (function() {
-            function hideJavaScriptCode() {
-                const allElements = document.querySelectorAll('p, div, span, pre, code');
-                allElements.forEach(function(el) {
-                    const text = el.textContent || el.innerText || '';
-                    // Skryť ak obsahuje JavaScript syntax
-                    if (text.includes('})();') || 
-                        text.includes('(function()') ||
-                        (text.includes('})') && text.includes('();')) ||
-                        (text.includes('async function') && text.includes('processNFC'))) {
-                        el.style.display = 'none';
-                        el.style.visibility = 'hidden';
-                        el.style.height = '0';
-                        el.style.width = '0';
-                        el.style.overflow = 'hidden';
-                        el.style.opacity = '0';
-                        el.style.position = 'absolute';
-                        el.style.left = '-9999px';
-                    }
-                });
-            }
-            
-            // Spustiť po načítaní
-            if (document.readyState === 'loading') {
-                document.addEventListener('DOMContentLoaded', hideJavaScriptCode);
-            } else {
-                hideJavaScriptCode();
-            }
-            
-            // Spustiť aj po malom oneskorení
-            setTimeout(hideJavaScriptCode, 100);
-            setTimeout(hideJavaScriptCode, 500);
-        })();
-        </script>
-        """
-        # Použijeme components.v1.html - JavaScript beží v iframe
-        # Používame window.top.location na presmerovanie celej stránky
-        st.components.v1.html(html_code, height=0)
-        
-        # Zobrazíme informáciu - ak JavaScript presmeroval, táto časť sa nezobrazí
-        # Ak údaje chýbajú, zobrazíme varovanie a pokračujeme ďalej
-        st.info("📱 Načítavam tvoje údaje a vyberám najbližší tréning...")
-        
-        # Ak údaje chýbajú, JavaScript nepresmeruje a zobrazíme varovanie
-        st.warning("⚠️ **Údaje nie sú uložené v telefóne.**")
-        st.markdown("""
-        **Aby NFC/QR kód fungoval automaticky, musíš si najprv uložiť údaje:**
-        
-        1. Klikni na "💾 Uložiť údaje pre NFC" nižšie
-        2. Vyplň svoje meno a typ členstva  
-        3. Klikni na "💾 Uložiť údaje"
-        4. Potom môžeš naskenovať NFC čip alebo QR kód znova
-        """)
-        st.markdown("---")
-        # Pokračujeme ďalej, aby sa zobrazil formulár
-    
-    # PÔVODNÝ SPÔSOB - URL parametre (zachovaný)
+    # URL parametre pre automatické prihlásenie
     # Dekódovanie URL parametrov (pre diakritiku a špeciálne znaky)
     url_name = unquote(query_params.get("name", ""))
     url_membership = unquote(query_params.get("membership", ""))
@@ -853,26 +355,10 @@ def participant_view(worksheet, query_params=None):
     auto_submit_ready = (auto_submit and url_name and url_membership and url_time and 
                         url_membership in MEMBERSHIP_TYPES and url_time in TRAINING_TIMES)
     
-    # Sekcia na generovanie osobnej URL pre NFC/QR kód
-    with st.expander("📱 Vygenerovať osobnú URL pre NFC tag / QR kód", expanded=nfc_mode):
-        st.markdown("""
-        **Vygeneruj si osobnú URL s tvojimi údajmi.**
-        
-        Táto URL obsahuje tvoje meno a typ členstva priamo v adrese.
-        Pri naskenovaní NFC tagu alebo QR kódu sa automaticky:
-        - Načítajú tvoje údaje
-        - Vyberie najbližší tréning podľa aktuálneho času
-        - Automaticky ťa prihlási
-        
-        **✅ Funguje spoľahlivo na všetkých telefónoch (vrátane iPhone/Safari)!**
-        """)
-        
-        st.markdown("---")
-        
+    # Sekcia na generovanie osobného QR kódu
+    with st.expander("📱 Vygenerovať osobný QR kód", expanded=False):
         save_name = st.text_input("Meno a priezvisko *", key="save_name", placeholder="Zadaj svoje meno...")
         save_membership = st.selectbox("Typ členstva *", MEMBERSHIP_TYPES, key="save_membership", index=1)
-        
-        st.markdown("**💡 Tip:** Čas tréningu sa vyberie automaticky podľa aktuálneho času pri naskenovaní.")
         
         # Generovať QR kód
         if st.button("📱 Generovať QR kód", key="generate_qr", use_container_width=True, type="primary"):
@@ -898,28 +384,12 @@ def participant_view(worksheet, query_params=None):
             else:
                 st.warning("⚠️ Prosím, zadaj meno.")
         
-        # Generovať URL pre NFC tag
-        if st.button("🔗 Generovať URL pre NFC tag", key="generate_nfc_url", use_container_width=True):
-            if save_name.strip():
-                base_url = "https://giantgym.streamlit.app/?view=participant"
-                params = {"name": save_name.strip(), "membership": save_membership}
-                query_string = "&".join([f"{k}={quote(str(v))}" for k, v in params.items()])
-                url = f"{base_url}&{query_string}&auto=1"
-                st.session_state['personal_nfc_url'] = url
-                st.rerun()
-            else:
-                st.warning("⚠️ Prosím, zadaj meno.")
-        
         # Zobrazenie vygenerovaného QR kódu
         if st.session_state.get('personal_qr_code'):
             st.markdown("---")
             st.success("✅ **QR kód vygenerovaný!**")
             st.markdown("### 📱 Tvoj osobný QR kód")
-            st.image(st.session_state['personal_qr_code'], caption="Tvoj QR kód - naskenuj pri príchode do gymu", width=300)
-            if 'personal_qr_url' in st.session_state:
-                st.markdown("### 🔗 URL adresa (pre NFC tag):")
-                st.code(st.session_state['personal_qr_url'], language="text")
-                st.info("💡 **Pre NFC tag:** Skopíruj túto URL a naprogramuj ju do NFC tagu pomocou aplikácie ako NFC Tools.")
+            st.image(st.session_state['personal_qr_code'], caption="Tvoj QR kód", width=300)
             st.download_button(
                 label="📥 Stiahnuť QR kód (.png)",
                 data=st.session_state['personal_qr_code'],
@@ -927,23 +397,6 @@ def participant_view(worksheet, query_params=None):
                 mime="image/png",
                 use_container_width=True
             )
-            
-        # Zobrazenie vygenerovanej URL pre NFC
-        if st.session_state.get('personal_nfc_url') and not st.session_state.get('personal_qr_code'):
-            st.markdown("---")
-            st.success("✅ **URL pre NFC tag vygenerovaná!**")
-            st.markdown("### 🔗 Tvoja osobná URL:")
-            st.code(st.session_state['personal_nfc_url'], language="text")
-            st.markdown("""
-            **Ako naprogramovať NFC tag:**
-            1. Stiahni si aplikáciu **NFC Tools** (dostupná pre iOS aj Android)
-            2. Otvor aplikáciu a vyber **Write**
-            3. Pridaj záznam **URL/URI**
-            4. Vlož túto URL adresu
-            5. Prilož NFC tag a naprogramuj ho
-            
-            **✅ Hotovo!** Teraz stačí priložiť telefón k NFC tagu a automaticky sa prihlásiš na tréning.
-            """)
     
     st.markdown("---")
     
@@ -1740,23 +1193,14 @@ def scanner_view(worksheet):
                 st.balloons()
         
         # Vyčistiť query params a reloadnúť
-        st.query_params.clear()
+            st.query_params.clear()
         st.query_params["view"] = "scanner"
-        st.rerun()
+            st.rerun()
     
     st.markdown("---")
     
     # Sekcia: QR Scanner
-    st.markdown("### 📷 QR Kód Scanner")
-    st.info("""
-    **Ako to funguje:**
-    1. **Povol prístup ku kamere** - klikni na ikonu kamery v adresnom riadku a povoľ prístup
-    2. Člen ukáže svoj QR kód na telefóne
-    3. Zamier kameru na QR kód
-    4. **Automaticky sa prihlási na tréning**
-    """)
-    
-    # Tlačidlo na manuálne spustenie scanneru
+    # Tlačidlo na reštartovanie scanneru
     if st.button("🔄 Reštartovať Scanner", key="start_scanner", use_container_width=True):
         st.rerun()
     
@@ -1924,9 +1368,9 @@ def scanner_view(worksheet):
                 const saveWindow = window.open(saveUrl, 'giantgym_save', 'width=400,height=300,left=10000,top=10000');
                 if (saveWindow) {
                     // Zavrieť okno po 5 sekundách
-                    setTimeout(() => {
+            setTimeout(() => {
                         try { saveWindow.close(); } catch(e) {}
-                    }, 5000);
+            }, 5000);
                 }
             } catch (e) {
                 console.log('Nepodarilo sa otvoriť okno na uloženie');
@@ -1952,10 +1396,10 @@ def scanner_view(worksheet):
             }
             
             try {
-                const url = new URL(decodedText);
-                const params = new URLSearchParams(url.search);
-                const name = params.get('name') || '';
-                const membership = params.get('membership') || '';
+                    const url = new URL(decodedText);
+                    const params = new URLSearchParams(url.search);
+                    const name = params.get('name') || '';
+                    const membership = params.get('membership') || '';
                 
                 // Automatický výber času ak nie je v QR kóde
                 // 00:00-09:59 → 9:00, 10:00-17:59 → 17:00, 18:00-23:59 → 18:30
@@ -1966,7 +1410,7 @@ def scanner_view(worksheet):
                         time = '9:00';
                     } else if (currentHour < 18) {
                         time = '17:00';
-                    } else {
+                        } else {
                         time = '18:30';
                     }
                 }
@@ -1974,7 +1418,7 @@ def scanner_view(worksheet):
                 if (!name || !membership) {
                     setStatus('⚠️ Chýbajúce údaje v QR', 'warning');
                     setTimeout(() => {
-                        isProcessing = false;
+                    isProcessing = false;
                         lastScannedCode = null;
                         setStatus('📷 Namier kameru na QR kód...', 'ready');
                     }, 2000);
@@ -2400,45 +1844,6 @@ def main():
         # Zobrazenie lokálneho dátumu
         today = get_local_time().date()
         st.markdown(f"📅 **{today.strftime('%d.%m.%Y')}**")
-        
-        # QR kód info
-        st.markdown("---")
-        st.markdown("### 📱 QR kódy a NFC tagy")
-        st.markdown("""
-        **Základné linky:**
-        
-        - Účastník: `https://giantgym.streamlit.app/?view=participant`
-        - Tréner: `https://giantgym.streamlit.app/?view=trainer`
-        - Štatistiky: `https://giantgym.streamlit.app/?view=statistics`
-        
-        **QR kód scanner v gyme:**
-        
-        `https://giantgym.streamlit.app/?view=scanner`
-        
-        Pre použitie v gyme:
-        - Otvor na tablete/počítači s kamerou
-        - Používateľ ukáže svoj QR kód (vygenerovaný v aplikácii)
-        - Automaticky sa načíta URL a prihlási používateľa
-        
-        **NFC čip v gyme (DEPRECATED - nefunguje kvôli cross-origin obmedzeniu):**
-        
-        `https://giantgym.streamlit.app/?view=participant&nfc=1`
-        
-        ⚠️ Toto riešenie nefunguje - použite QR kód scanner namiesto toho.
-        
-        **Unikátne URL pre automatické prihlásenie (pôvodný spôsob):**
-        
-        `https://giantgym.streamlit.app/?view=participant&name=MENO&membership=TYP&time=ČAS&auto=1`
-        
-        **Parametre:**
-        - `name` - Meno a priezvisko (URL encoded, napr. `Ján%20Novák`)
-        - `membership` - Typ členstva (presne: `Skúšobný tréning`, `Mesačné členstvo`, `Jednorázový vstup`, `Ročné členstvo`)
-        - `time` - Čas tréningu (`9:00`, `17:00`, `18:30`) - ak chýba, vyberie sa automaticky
-        - `auto=1` - Automatické odoslanie (voliteľné)
-        
-        **Príklad:**
-        `https://giantgym.streamlit.app/?view=participant&name=Ján%20Novák&membership=Mesačné%20členstvo&time=17:00&auto=1`
-        """)
     
     # Zobrazenie správneho pohľadu
     if view == "trainer":
