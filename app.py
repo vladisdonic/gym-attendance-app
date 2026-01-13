@@ -1938,21 +1938,6 @@ def scanner_view(worksheet):
                     html5QrcodeScanner.stop().catch(() => {});
                 }
                 
-                // METÓDA 1: Uložiť do localStorage (polling script to zachytí)
-                debug('Ukladám údaje do localStorage...');
-                try {
-                    const scanData = JSON.stringify({
-                        name: name,
-                        membership: membership,
-                        time: time || '',
-                        timestamp: Date.now()
-                    });
-                    localStorage.setItem('giantgym_qr_scan', scanData);
-                    debug('Údaje uložené do localStorage');
-                } catch (e) {
-                    debug('Chyba pri ukladaní do localStorage: ' + e.message);
-                }
-                
                 // Vytvoriť URL pre presmerovanie
                 const redirectParams = new URLSearchParams();
                 redirectParams.set('view', 'scanner');
@@ -1966,66 +1951,39 @@ def scanner_view(worksheet):
                 const redirectUrl = 'https://giantgym.streamlit.app/?' + redirectParams.toString();
                 debug('Cieľová URL: ' + redirectUrl);
                 
-                // METÓDA 2: Anchor click s target="_top"
-                try {
-                    debug('Skúšam anchor click...');
-                    const a = document.createElement('a');
-                    a.href = redirectUrl;
-                    a.target = '_top';
-                    a.rel = 'noopener';
-                    a.style.display = 'none';
-                    document.body.appendChild(a);
-                    a.click();
-                    document.body.removeChild(a);
-                    debug('Anchor click odoslaný');
-                } catch (e) {
-                    debug('Chyba pri anchor click: ' + e.message);
-                }
+                // HLAVNÁ METÓDA: Otvoriť v novom tabe pomocou window.open
+                // Toto by malo fungovať aj v sandboxed iframe
+                debug('Otváram nový tab...');
+                const newWindow = window.open(redirectUrl, '_blank');
                 
-                // METÓDA 3: Po 2 sekundách skúsiť form submit
-                setTimeout(() => {
-                    debug('Skúšam form submit ako zálohu...');
-                    try {
-                        const form = document.createElement('form');
-                        form.method = 'GET';
-                        form.action = 'https://giantgym.streamlit.app/';
-                        form.target = '_top';
-                        form.style.display = 'none';
-                        
-                        const addInput = (n, v) => {
-                            const input = document.createElement('input');
-                            input.type = 'hidden';
-                            input.name = n;
-                            input.value = v;
-                            form.appendChild(input);
-                        };
-                        
-                        addInput('view', 'scanner');
-                        addInput('qr_name', name);
-                        addInput('qr_membership', membership);
-                        if (time) addInput('qr_time', time);
-                        addInput('qr_auto', '1');
-                        
-                        document.body.appendChild(form);
-                        form.submit();
-                    } catch (e2) {
-                        debug('Form submit zlyhal: ' + e2.message);
-                    }
-                }, 2000);
-                
-                // METÓDA 4: Po 4 sekundách zobraziť manuálny odkaz
-                setTimeout(() => {
-                    debug('Zobrazujem manuálny odkaz...');
-                    setStatus('⚠️ Automatické presmerovanie nefunguje. Klikni na zelené tlačidlo:', 'warning');
+                if (newWindow) {
+                    debug('Nový tab otvorený úspešne!');
+                    setStatus('✅ Otvorený nový tab s prihlásením! Skontroluj nový tab.', 'success');
+                    
+                    // Zobraziť info
+                    const container = document.getElementById('qr-scanner-container');
+                    const infoDiv = document.createElement('div');
+                    infoDiv.innerHTML = '<div style="margin-top: 20px; padding: 20px; background: linear-gradient(135deg, #e3f2fd 0%, #bbdefb 100%); border-radius: 12px; text-align: center; border: 2px solid #2196f3;">' +
+                        '<p style="margin: 0 0 10px 0; font-size: 18px; color: #1565c0;"><strong>✅ ' + name + '</strong></p>' +
+                        '<p style="margin: 0; color: #1976d2;">Prihlásenie sa otvorilo v novom tabe.<br>Prepni sa na nový tab pre dokončenie.</p>' +
+                        '</div>';
+                    container.appendChild(infoDiv);
+                } else {
+                    // Popup bol zablokovaný - zobraziť manuálny odkaz
+                    debug('Popup zablokovaný, zobrazujem manuálny odkaz');
+                    setStatus('⚠️ Popup zablokovaný. Skopíruj URL alebo klikni na odkaz:', 'warning');
+                    
                     const container = document.getElementById('qr-scanner-container');
                     const linkDiv = document.createElement('div');
                     linkDiv.innerHTML = '<div style="margin-top: 20px; padding: 20px; background: linear-gradient(135deg, #e8f5e9 0%, #c8e6c9 100%); border-radius: 12px; text-align: center; border: 2px solid #4caf50;">' +
                         '<p style="margin: 0 0 15px 0; font-size: 16px; color: #2e7d32;"><strong>✅ QR kód bol naskenovaný!</strong></p>' +
                         '<p style="margin: 0 0 15px 0; color: #388e3c;">' + name + ' • ' + membership + '</p>' +
-                        '<a href="' + redirectUrl + '" target="_top" style="display: inline-block; padding: 15px 30px; background: linear-gradient(135deg, #4caf50 0%, #45a049 100%); color: white; text-decoration: none; border-radius: 8px; font-weight: bold; font-size: 18px; box-shadow: 0 4px 15px rgba(76, 175, 80, 0.4);">📋 DOKONČIŤ PRIHLÁSENIE</a>' +
+                        '<p style="margin: 0 0 10px 0; font-size: 12px; color: #666;">Skopíruj túto URL a vlož ju do adresného riadku:</p>' +
+                        '<input type="text" value="' + redirectUrl + '" readonly onclick="this.select(); document.execCommand(\'copy\');" style="width: 100%; padding: 10px; border: 1px solid #ccc; border-radius: 4px; font-size: 11px; margin-bottom: 15px; cursor: pointer;" title="Klikni pre skopírovanie">' +
+                        '<br><a href="' + redirectUrl + '" target="_blank" style="display: inline-block; padding: 15px 30px; background: linear-gradient(135deg, #4caf50 0%, #45a049 100%); color: white; text-decoration: none; border-radius: 8px; font-weight: bold; font-size: 18px; box-shadow: 0 4px 15px rgba(76, 175, 80, 0.4);">📋 OTVORIŤ V NOVOM TABE</a>' +
                         '</div>';
                     container.appendChild(linkDiv);
-                }, 4000);
+                }
                 
             } catch (e) {
                 debug('Chyba: ' + e.message);
