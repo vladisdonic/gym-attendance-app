@@ -1722,16 +1722,13 @@ def trainer_view(worksheet):
 
 def scanner_view(worksheet):
     """Pohľad pre QR kód scanner v gyme - používa JavaScript na dekódovanie v prehliadači."""
-    # Získať query params
-    query_params = st.query_params
     
-    # Kontrola, či boli údaje naskenované cez QR kód (query params)
-    qr_submit = query_params.get("qr_submit", "0") == "1"
-    if qr_submit:
-        # Extrahovať údaje z query params
-        name = unquote(query_params.get("qr_name", ""))
-        membership = unquote(query_params.get("qr_membership", ""))
-        time = unquote(query_params.get("qr_time", ""))
+    # Kontrola, či boli údaje naskenované cez QR kód (session state)
+    if st.session_state.get('qr_scanned_data'):
+        scanned_data = st.session_state['qr_scanned_data']
+        name = scanned_data.get('name', '')
+        membership = scanned_data.get('membership', '')
+        time = scanned_data.get('time', '')
         
         # Ak čas nie je v údajoch, automaticky vyberieme najbližší
         if not time:
@@ -1748,35 +1745,26 @@ def scanner_view(worksheet):
                 st.success(f"🎉 **{name}** úspešne prihlásený/á na tréning **{time}**!")
                 st.balloons()
                 
-                # Automaticky vyčistiť query params a znova spustiť scanner po 2 sekundách
-                # Namiesto presmerovania len vyčistíme query params a znova spustíme scanner
+                # Vyčistiť session state a znova spustiť scanner
+                del st.session_state['qr_scanned_data']
+                st.session_state['restart_scanner_after_success'] = True
+                
+                # Rerun po 2 sekundách
                 st.markdown("""
                 <script>
                 setTimeout(function() {
-                    // Vyčistiť query params cez history API (bez presmerovania)
-                    if (window.top && window.top !== window) {
-                        // Ak sme v iframe, presmerovať hlavnú stránku
-                        window.top.location.href = window.top.location.pathname + '?view=scanner';
-                    } else {
-                        // Ak nie sme v iframe, len vyčistiť query params
-                        window.history.replaceState({}, '', window.location.pathname + '?view=scanner');
-                        // Znova spustiť scanner
-                        if (window.restartScanner) {
-                            setTimeout(function() {
-                                window.restartScanner();
-                            }, 500);
-                        }
+                    if (window.restartScanner) {
+                        window.restartScanner();
                     }
                 }, 2000);
                 </script>
                 """, unsafe_allow_html=True)
-                
-                # Nastaviť flag, že sa má znova spustiť scanner po rerun
-                st.session_state['restart_scanner_after_success'] = True
             else:
                 st.error("❌ Chyba pri prihlásení. Skús znova.")
+                del st.session_state['qr_scanned_data']
         else:
             st.warning("⚠️ Neplatné údaje v QR kóde.")
+            del st.session_state['qr_scanned_data']
     
     st.title("📷 QR Kód Scanner - Gym")
     st.markdown("**Naskenuj QR kód pre automatické prihlásenie na tréning**")
@@ -2013,93 +2001,47 @@ def scanner_view(worksheet):
                     addDebugMsg('📋 Extrahované údaje: name=' + name + ', membership=' + membership + ', time=' + time);
                     console.log('Extrahované údaje:', { name, membership, time });
                     
-                    // Odoslať údaje na server cez query params
-                    addDebugMsg('🔗 Vytváram novú URL...');
-                    console.log('Vytváram novú URL...');
+                    // Uložiť údaje do Streamlit session state a spustiť rerun
+                    addDebugMsg('💾 Ukladám údaje do Streamlit session state...');
+                    console.log('Ukladám údaje do Streamlit session state...');
                     
-                    // Použiť absolútnu URL namiesto relatívnej (pre iframe kompatibilitu)
-                    const baseUrl = 'https://giantgym.streamlit.app/';
-                    addDebugMsg('🔗 baseUrl: ' + baseUrl);
-                    console.log('baseUrl:', baseUrl);
+                    // Použiť Streamlit's JavaScript API na komunikáciu s Python kódom
+                    // Namiesto presmerovania použijeme postMessage na komunikáciu s hlavnou stránkou
+                    const scanData = {
+                        name: name,
+                        membership: membership,
+                        time: time || ''
+                    };
                     
-                    // Vytvoriť URL bez dvojitého encodingu
-                    const newParams = new URLSearchParams();
-                    newParams.set('view', 'scanner');
-                    newParams.set('qr_name', name); // URLSearchParams už automaticky encoduje
-                    newParams.set('qr_membership', membership);
-                    if (time) {
-                        newParams.set('qr_time', time);
-                    }
-                    newParams.set('qr_submit', '1');
+                    addDebugMsg('📨 Posielam údaje cez postMessage...');
+                    console.log('Posielam údaje:', scanData);
                     
-                    const newUrl = baseUrl + '?' + newParams.toString();
-                    addDebugMsg('🔗 Nová URL vytvorená: ' + newUrl);
-                    console.log('Nová URL vytvorená:', newUrl);
-                    
-                    // Presmerovať hlavnú stránku (nie iframe) na novú URL
-                    addDebugMsg('⏳ Začínam presmerovanie hlavnej stránky za 500ms...');
-                    console.log('Začínam presmerovanie na:', newUrl);
-                    
-                    // Malé oneskorenie, aby sa hláška stihla zobraziť
-                    setTimeout(() => {
-                        addDebugMsg('🚀 Spúšťam presmerovanie...');
-                        console.log('Spúšťam presmerovanie...');
-                        
-                        // Skúsiť priame presmerovanie cez window.top.location.href
-                        try {
-                            if (window.top && window.top !== window) {
-                                // Ak sme v iframe, presmerovať hlavnú stránku
-                                addDebugMsg('🌐 Používam window.top.location.href');
-                                console.log('Používam window.top.location.href');
-                                console.log('window.top:', window.top);
-                                console.log('window.top.location:', window.top.location);
-                                window.top.location.href = newUrl;
-                                addDebugMsg('✅ Presmerovanie cez window.top.location.href');
-                            } else {
-                                // Ak nie sme v iframe, presmerovať priamo
-                                addDebugMsg('🌐 Používam window.location.href');
-                                console.log('Používam window.location.href');
-                                window.location.href = newUrl;
+                    // Poslať správu hlavnej stránke (nie iframe)
+                    try {
+                        if (window.parent && window.parent !== window) {
+                            // Ak sme v iframe, poslať správu hlavnej stránke
+                            window.parent.postMessage({
+                                type: 'QR_SCAN_DATA',
+                                data: scanData
+                            }, '*');
+                            addDebugMsg('✅ Správa odoslaná cez postMessage');
+                        } else {
+                            // Ak nie sme v iframe, použiť Streamlit's setComponentValue
+                            // Alebo použiť window.location.search na aktualizáciu URL
+                            addDebugMsg('🌐 Nie sme v iframe, používam window.location.search');
+                            const params = new URLSearchParams();
+                            params.set('qr_name', name);
+                            params.set('qr_membership', membership);
+                            if (time) {
+                                params.set('qr_time', time);
                             }
-                        } catch (e) {
-                            addDebugMsg('❌ Chyba pri presmerovaní: ' + (e.message || e.toString()));
-                            console.error('Chyba pri presmerovaní:', e);
-                            
-                            // Fallback 1 - skúsiť postMessage
-                            try {
-                                addDebugMsg('🔄 Fallback 1: používam postMessage');
-                                console.log('Fallback 1: používam postMessage');
-                                if (window.parent && window.parent !== window) {
-                                    window.parent.postMessage({
-                                        type: 'QR_SCAN_SUCCESS',
-                                        url: newUrl
-                                    }, '*');
-                                    addDebugMsg('✅ Správa odoslaná cez postMessage');
-                                } else {
-                                    throw new Error('window.parent nie je dostupný');
-                                }
-                            } catch (e2) {
-                                addDebugMsg('❌ Fallback 1 zlyhal: ' + (e2.message || e2.toString()));
-                                console.error('Fallback 1 zlyhal:', e2);
-                                
-                                // Fallback 2 - skúsiť window.open s _top
-                                try {
-                                    addDebugMsg('🔄 Fallback 2: používam window.open s _top');
-                                    console.log('Fallback 2: používam window.open s _top');
-                                    window.open(newUrl, '_top');
-                                    addDebugMsg('✅ Presmerovanie cez window.open(_top)');
-                                } catch (e3) {
-                                    addDebugMsg('❌ Aj fallback 2 zlyhal: ' + (e3.message || e3.toString()));
-                                    console.error('Aj fallback 2 zlyhal:', e3);
-                                    
-                                    // Posledný pokus - zobraziť chybu a link
-                                    if (resultsDiv) {
-                                        resultsDiv.innerHTML = '<div style="padding: 15px; background-color: #f8d7da; border-radius: 5px; color: #721c24;">❌ Chyba pri presmerovaní. <a href="' + newUrl + '" target="_top" style="color: #721c24; text-decoration: underline;">Klikni tu pre manuálne presmerovanie</a></div>';
-                                    }
-                                }
-                            }
+                            params.set('qr_submit', '1');
+                            window.location.search = params.toString();
                         }
-                    }, 500);
+                    } catch (e) {
+                        addDebugMsg('❌ Chyba pri odosielaní údajov: ' + (e.message || e.toString()));
+                        console.error('Chyba pri odosielaní údajov:', e);
+                    }
                     
                 } catch (e) {
                     const errorMsg = e && e.message ? e.message : (e && e.toString ? e.toString() : 'Neznáma chyba');
