@@ -963,7 +963,7 @@ def participant_view(worksheet, query_params=None):
             
         # Zobrazenie vygenerovanej URL pre NFC
         if st.session_state.get('personal_nfc_url') and not st.session_state.get('personal_qr_code'):
-            st.markdown("---")
+        st.markdown("---")
             st.success("✅ **URL pre NFC tag vygenerovaná!**")
             st.markdown("### 🔗 Tvoja osobná URL:")
             st.code(st.session_state['personal_nfc_url'], language="text")
@@ -1837,6 +1837,8 @@ def scanner_view(worksheet):
                 'membership': membership,
                 'time': time
             }
+            # Nastaviť flag pre automatické odoslanie
+            st.session_state['auto_submit_scanner'] = True
             # Vyčistiť query params
             st.query_params.clear()
             st.rerun()
