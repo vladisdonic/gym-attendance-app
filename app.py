@@ -1938,6 +1938,21 @@ def scanner_view(worksheet):
                     html5QrcodeScanner.stop().catch(() => {});
                 }
                 
+                // METÓDA 1: Uložiť do localStorage (polling script to zachytí)
+                debug('Ukladám údaje do localStorage...');
+                try {
+                    const scanData = JSON.stringify({
+                        name: name,
+                        membership: membership,
+                        time: time || '',
+                        timestamp: Date.now()
+                    });
+                    localStorage.setItem('giantgym_qr_scan', scanData);
+                    debug('Údaje uložené do localStorage');
+                } catch (e) {
+                    debug('Chyba pri ukladaní do localStorage: ' + e.message);
+                }
+                
                 // Vytvoriť URL pre presmerovanie
                 const redirectParams = new URLSearchParams();
                 redirectParams.set('view', 'scanner');
@@ -1951,7 +1966,7 @@ def scanner_view(worksheet):
                 const redirectUrl = 'https://giantgym.streamlit.app/?' + redirectParams.toString();
                 debug('Cieľová URL: ' + redirectUrl);
                 
-                // METÓDA 1: Anchor click s target="_top" (najspoľahlivejšia)
+                // METÓDA 2: Anchor click s target="_top"
                 try {
                     debug('Skúšam anchor click...');
                     const a = document.createElement('a');
@@ -1963,12 +1978,14 @@ def scanner_view(worksheet):
                     a.click();
                     document.body.removeChild(a);
                     debug('Anchor click odoslaný');
-                    
-                    // Ak sa do 2 sekúnd nič nestane, skús ďalšiu metódu
-                    setTimeout(() => {
-                        debug('Anchor click možno nezafungoval, skúšam form submit...');
-                        
-                        // METÓDA 2: Form submission s target="_top"
+                } catch (e) {
+                    debug('Chyba pri anchor click: ' + e.message);
+                }
+                
+                // METÓDA 3: Po 2 sekundách skúsiť form submit
+                setTimeout(() => {
+                    debug('Skúšam form submit ako zálohu...');
+                    try {
                         const form = document.createElement('form');
                         form.method = 'GET';
                         form.action = 'https://giantgym.streamlit.app/';
@@ -1991,21 +2008,24 @@ def scanner_view(worksheet):
                         
                         document.body.appendChild(form);
                         form.submit();
-                    }, 2000);
-                    
-                } catch (e) {
-                    debug('Chyba pri anchor click: ' + e.message);
-                    
-                    // METÓDA 3: Zobraziť odkaz pre manuálne kliknutie
-                    setStatus('⚠️ Automatické presmerovanie nefunguje. Klikni na odkaz nižšie:', 'warning');
+                    } catch (e2) {
+                        debug('Form submit zlyhal: ' + e2.message);
+                    }
+                }, 2000);
+                
+                // METÓDA 4: Po 4 sekundách zobraziť manuálny odkaz
+                setTimeout(() => {
+                    debug('Zobrazujem manuálny odkaz...');
+                    setStatus('⚠️ Automatické presmerovanie nefunguje. Klikni na zelené tlačidlo:', 'warning');
                     const container = document.getElementById('qr-scanner-container');
                     const linkDiv = document.createElement('div');
-                    linkDiv.innerHTML = '<div style="margin-top: 20px; padding: 15px; background: #e7f3ff; border-radius: 8px; text-align: center;">' +
-                        '<p style="margin: 0 0 10px 0;"><strong>Klikni sem pre dokončenie prihlásenia:</strong></p>' +
-                        '<a href="' + redirectUrl + '" target="_top" style="display: inline-block; padding: 12px 24px; background: #28a745; color: white; text-decoration: none; border-radius: 6px; font-weight: bold;">✅ Prihlásiť ' + name + '</a>' +
+                    linkDiv.innerHTML = '<div style="margin-top: 20px; padding: 20px; background: linear-gradient(135deg, #e8f5e9 0%, #c8e6c9 100%); border-radius: 12px; text-align: center; border: 2px solid #4caf50;">' +
+                        '<p style="margin: 0 0 15px 0; font-size: 16px; color: #2e7d32;"><strong>✅ QR kód bol naskenovaný!</strong></p>' +
+                        '<p style="margin: 0 0 15px 0; color: #388e3c;">' + name + ' • ' + membership + '</p>' +
+                        '<a href="' + redirectUrl + '" target="_top" style="display: inline-block; padding: 15px 30px; background: linear-gradient(135deg, #4caf50 0%, #45a049 100%); color: white; text-decoration: none; border-radius: 8px; font-weight: bold; font-size: 18px; box-shadow: 0 4px 15px rgba(76, 175, 80, 0.4);">📋 DOKONČIŤ PRIHLÁSENIE</a>' +
                         '</div>';
                     container.appendChild(linkDiv);
-                }
+                }, 4000);
                 
             } catch (e) {
                 debug('Chyba: ' + e.message);
@@ -2104,17 +2124,57 @@ def scanner_view(worksheet):
     
     st.components.v1.html(scanner_html, height=500)
     
-    # Listener pre postMessage (fallback ak window.top nefunguje)
-    st.markdown("""
+    # Polling script na kontrolu localStorage - toto beží v samostatnom iframe
+    # ktorý pravidelne kontroluje či scanner uložil nejaké údaje
+    polling_html = """
     <script>
-    window.addEventListener('message', function(event) {
-        if (event.data && event.data.type === 'QR_REDIRECT' && event.data.url) {
-            console.log('Prijatý QR_REDIRECT postMessage:', event.data.url);
-            window.location.href = event.data.url;
+    (function() {
+        let checkCount = 0;
+        const maxChecks = 300; // 5 minút (300 * 1000ms)
+        
+        function checkForScanData() {
+            checkCount++;
+            try {
+                const scanData = localStorage.getItem('giantgym_qr_scan');
+                if (scanData) {
+                    console.log('Našiel som scan data v localStorage:', scanData);
+                    // Vymazať údaje aby sa nezopakovali
+                    localStorage.removeItem('giantgym_qr_scan');
+                    
+                    const data = JSON.parse(scanData);
+                    if (data.name && data.membership) {
+                        // Vytvoriť URL a presmerovať
+                        const params = new URLSearchParams();
+                        params.set('view', 'scanner');
+                        params.set('qr_name', data.name);
+                        params.set('qr_membership', data.membership);
+                        if (data.time) params.set('qr_time', data.time);
+                        params.set('qr_auto', '1');
+                        
+                        const redirectUrl = 'https://giantgym.streamlit.app/?' + params.toString();
+                        console.log('Presmerovávam na:', redirectUrl);
+                        
+                        // Presmerovať hlavnú stránku
+                        window.top.location.href = redirectUrl;
+                    }
+                }
+            } catch (e) {
+                console.error('Chyba pri kontrole localStorage:', e);
+            }
+            
+            // Pokračovať v kontrole
+            if (checkCount < maxChecks) {
+                setTimeout(checkForScanData, 1000);
+            }
         }
-    });
+        
+        // Začať kontrolovať
+        setTimeout(checkForScanData, 500);
+    })();
     </script>
-    """, unsafe_allow_html=True)
+    <div style="display:none;">Polling active</div>
+    """
+    st.components.v1.html(polling_html, height=0)
     
     # Manuálny formulár ako záloha
     st.markdown("---")
