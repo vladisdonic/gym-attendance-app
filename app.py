@@ -1788,11 +1788,23 @@ def scanner_view(worksheet):
             console.log('📨 event.data:', event.data);
             console.log('📨 event.origin:', event.origin);
             
-            if (event.data && event.data.type === 'QR_SCAN_SUCCESS') {
-                console.log('✅ QR scan success message received v scanner_view:', event.data.url);
-                // Presmerovať hlavnú stránku na novú URL
-                console.log('🌐 Presmerovávam na:', event.data.url);
-                window.location.href = event.data.url;
+            if (event.data && event.data.type === 'QR_SCAN_DATA') {
+                console.log('✅ QR scan data received:', event.data.data);
+                const scanData = event.data.data;
+                
+                // Uložiť údaje do session storage a spustiť rerun
+                // Použijeme Streamlit's rerun mechanism cez query params
+                const params = new URLSearchParams(window.location.search);
+                params.set('qr_name', scanData.name);
+                params.set('qr_membership', scanData.membership);
+                if (scanData.time) {
+                    params.set('qr_time', scanData.time);
+                }
+                params.set('qr_submit', '1');
+                
+                // Aktualizovať URL a spustiť rerun
+                window.history.replaceState({}, '', window.location.pathname + '?' + params.toString());
+                window.location.reload();
             }
         }
         
