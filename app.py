@@ -434,7 +434,7 @@ def generate_club_card(name, membership, qr_url):
 def participant_view(worksheet, query_params=None):
     """Pohľad pre účastníka - prihlásenie na tréning."""
     st.title("🥊 Prihlásenie na tréning")
-        st.markdown("---")
+    st.markdown("---")
     
     # Načítanie parametrov z URL
     if query_params is None:
@@ -1318,9 +1318,9 @@ def scanner_view(worksheet):
                 st.balloons()
         
         # Vyčistiť query params a reloadnúť
-            st.query_params.clear()
+        st.query_params.clear()
         st.query_params["view"] = "scanner"
-            st.rerun()
+        st.rerun()
     
     st.markdown("---")
     
