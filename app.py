@@ -18,6 +18,8 @@ import io
 import base64
 import hashlib
 import pytz
+from PIL import Image, ImageDraw, ImageFont
+import requests
 
 # Konfigurácia stránky
 st.set_page_config(
@@ -67,6 +69,9 @@ TRAINING_TIMES = [
 
 # Heslo pre trénerskú časť
 TRAINER_PASSWORD = "supernova"
+
+# Heslo pre dokumentáciu
+DOCS_PASSWORD = "supernova"
 
 # Časové pásmo pre Slovensko
 TIMEZONE = pytz.timezone('Europe/Bratislava')
@@ -301,12 +306,135 @@ def get_next_training_time():
     
     # 18:00 - 23:59 → 18:30 (večerný tréning)
         return "18:30"
+    
+
+def generate_club_card(name, membership, qr_url):
+    """
+    Generuje klubovú kartu s QR kódom ako PNG obrázok.
+    
+    Args:
+        name: Meno člena
+        membership: Typ členstva
+        qr_url: URL pre QR kód
+    
+    Returns:
+        bytes: PNG obrázok klubovej karty
+    """
+    # Rozmery karty (štandardný pomer 85.6 x 54 mm, 300 DPI)
+    card_width = 1012
+    card_height = 638
+    
+    # Vytvorenie karty s gradientom
+    card = Image.new('RGB', (card_width, card_height), '#1a1a2e')
+    draw = ImageDraw.Draw(card)
+    
+    # Gradient pozadie - tmavo modrá až čierna
+    for y in range(card_height):
+        # Gradient od tmavo modrej (#1a1a2e) po čiernu (#0f0f1a)
+        r = int(26 - (y / card_height) * 11)
+        g = int(26 - (y / card_height) * 11)
+        b = int(46 - (y / card_height) * 20)
+        for x in range(card_width):
+            draw.point((x, y), fill=(r, g, b))
+    
+    # Dekoratívne prvky - červené akcenty
+    # Horná lišta
+    draw.rectangle([(0, 0), (card_width, 8)], fill='#e63946')
+    # Spodná lišta
+    draw.rectangle([(0, card_height - 8), (card_width, card_height)], fill='#e63946')
+    
+    # Diagonálny dekoratívny prvok
+    for i in range(3):
+        offset = i * 15
+        draw.polygon([
+            (card_width - 200 - offset, 0),
+            (card_width - 150 - offset, 0),
+            (card_width - offset, card_height),
+            (card_width - 50 - offset, card_height)
+        ], fill='#e6394620')
+    
+    # Fonty - používame základné fonty dostupné v PIL
+    try:
+        # Skúsime načítať systémový font
+        title_font = ImageFont.truetype("/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf", 48)
+        name_font = ImageFont.truetype("/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf", 36)
+        membership_font = ImageFont.truetype("/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf", 24)
+        small_font = ImageFont.truetype("/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf", 16)
+    except:
+        try:
+            # Alternatívne fonty pre macOS/Windows
+            title_font = ImageFont.truetype("Arial Bold.ttf", 48)
+            name_font = ImageFont.truetype("Arial Bold.ttf", 36)
+            membership_font = ImageFont.truetype("Arial.ttf", 24)
+            small_font = ImageFont.truetype("Arial.ttf", 16)
+        except:
+            # Fallback na default font
+            title_font = ImageFont.load_default()
+            name_font = ImageFont.load_default()
+            membership_font = ImageFont.load_default()
+            small_font = ImageFont.load_default()
+    
+    # Názov gymu
+    draw.text((40, 30), "GIANT GYM", font=title_font, fill='#e63946')
+    draw.text((40, 85), "ČLENSKÁ KARTA", font=membership_font, fill='#888888')
+    
+    # Meno člena
+    draw.text((40, 160), name.upper(), font=name_font, fill='#ffffff')
+    
+    # Typ členstva
+    membership_label = f"• {membership}"
+    draw.text((40, 210), membership_label, font=membership_font, fill='#e63946')
+    
+    # QR kód - generovanie
+    qr = qrcode.QRCode(
+        version=1,
+        error_correction=qrcode.constants.ERROR_CORRECT_H,
+        box_size=8,
+        border=2
+    )
+    qr.add_data(qr_url)
+    qr.make(fit=True)
+    
+    qr_img = qr.make_image(fill_color='#ffffff', back_color='#1a1a2e')
+    qr_img = qr_img.convert('RGB')
+    
+    # Zväčšenie QR kódu
+    qr_size = 250
+    qr_img = qr_img.resize((qr_size, qr_size), Image.Resampling.LANCZOS)
+    
+    # Pozícia QR kódu - vpravo dole s okrajom
+    qr_x = card_width - qr_size - 40
+    qr_y = card_height - qr_size - 50
+    
+    # Biely rámček okolo QR kódu
+    border = 8
+    draw.rectangle([
+        (qr_x - border, qr_y - border),
+        (qr_x + qr_size + border, qr_y + qr_size + border)
+    ], fill='#ffffff', outline='#e63946', width=3)
+    
+    # Vloženie QR kódu
+    card.paste(qr_img, (qr_x, qr_y))
+    
+    # Text pod QR kódom
+    scan_text = "NASKENUJ PRE PRIHLÁSENIE"
+    draw.text((qr_x - 30, qr_y + qr_size + 20), scan_text, font=small_font, fill='#888888')
+    
+    # Dekoratívny prvok - boxerská päsť (emoji simulácia textom)
+    draw.text((40, card_height - 80), "🥊", font=title_font, fill='#ffffff')
+    
+    # Uloženie do bufferu
+    buffer = io.BytesIO()
+    card.save(buffer, format='PNG', quality=95)
+    buffer.seek(0)
+    
+    return buffer.getvalue()
 
 
 def participant_view(worksheet, query_params=None):
     """Pohľad pre účastníka - prihlásenie na tréning."""
     st.title("🥊 Prihlásenie na tréning")
-    st.markdown("---")
+        st.markdown("---")
     
     # Načítanie parametrov z URL
     if query_params is None:
@@ -355,45 +483,42 @@ def participant_view(worksheet, query_params=None):
     auto_submit_ready = (auto_submit and url_name and url_membership and url_time and 
                         url_membership in MEMBERSHIP_TYPES and url_time in TRAINING_TIMES)
     
-    # Sekcia na generovanie osobného QR kódu
-    with st.expander("📱 Vygenerovať osobný QR kód", expanded=False):
+    # Sekcia na generovanie osobnej klubovej karty
+    with st.expander("🎴 Vygenerovať klubovú kartu", expanded=False):
         save_name = st.text_input("Meno a priezvisko *", key="save_name", placeholder="Zadaj svoje meno...")
         save_membership = st.selectbox("Typ členstva *", MEMBERSHIP_TYPES, key="save_membership", index=1)
         
-        # Generovať QR kód
-        if st.button("📱 Generovať QR kód", key="generate_qr", use_container_width=True, type="primary"):
+        # Generovať klubovú kartu
+        if st.button("🎴 Generovať klubovú kartu", key="generate_qr", use_container_width=True, type="primary"):
             if save_name.strip():
                 base_url = "https://giantgym.streamlit.app/?view=participant"
                 params = {"name": save_name.strip(), "membership": save_membership}
                 query_string = "&".join([f"{k}={quote(str(v))}" for k, v in params.items()])
                 url = f"{base_url}&{query_string}&auto=1"
                 try:
-                    qr = qrcode.QRCode(version=1, box_size=10, border=5)
-                    qr.add_data(url)
-                    qr.make(fit=True)
-                    img = qr.make_image(fill_color="black", back_color="white")
-                    qr_img_buffer = io.BytesIO()
-                    img.save(qr_img_buffer, format='PNG')
-                    qr_img_buffer.seek(0)
-                    st.session_state['personal_qr_code'] = qr_img_buffer.getvalue()
+                    # Generovanie klubovej karty
+                    club_card_data = generate_club_card(save_name.strip(), save_membership, url)
+                    st.session_state['personal_club_card'] = club_card_data
                     st.session_state['personal_qr_url'] = url
-                    st.session_state['personal_qr_filename'] = f"giantgym_{save_name.strip().replace(' ', '_')}.png"
+                    st.session_state['personal_qr_name'] = save_name.strip()
+                    st.session_state['personal_qr_membership'] = save_membership
+                    st.session_state['personal_qr_filename'] = f"giantgym_karta_{save_name.strip().replace(' ', '_')}.png"
                     st.rerun()
                 except Exception as e:
-                    st.error(f"❌ Chyba pri generovaní QR kódu: {e}")
+                    st.error(f"❌ Chyba pri generovaní karty: {e}")
             else:
                 st.warning("⚠️ Prosím, zadaj meno.")
         
-        # Zobrazenie vygenerovaného QR kódu
-        if st.session_state.get('personal_qr_code'):
+        # Zobrazenie vygenerovanej klubovej karty
+        if st.session_state.get('personal_club_card'):
             st.markdown("---")
-            st.success("✅ **QR kód vygenerovaný!**")
-            st.markdown("### 📱 Tvoj osobný QR kód")
-            st.image(st.session_state['personal_qr_code'], caption="Tvoj QR kód", width=300)
+            st.success("✅ **Klubová karta vygenerovaná!**")
+            st.markdown("### 🎴 Tvoja osobná klubová karta")
+            st.image(st.session_state['personal_club_card'], caption="Tvoja klubová karta", use_container_width=True)
             st.download_button(
-                label="📥 Stiahnuť QR kód (.png)",
-                data=st.session_state['personal_qr_code'],
-                file_name=st.session_state.get('personal_qr_filename', 'giantgym_qr.png'),
+                label="📥 Stiahnuť klubovú kartu (.png)",
+                data=st.session_state['personal_club_card'],
+                file_name=st.session_state.get('personal_qr_filename', 'giantgym_karta.png'),
                 mime="image/png",
                 use_container_width=True
             )
@@ -1193,9 +1318,9 @@ def scanner_view(worksheet):
                 st.balloons()
         
         # Vyčistiť query params a reloadnúť
-        st.query_params.clear()
+            st.query_params.clear()
         st.query_params["view"] = "scanner"
-        st.rerun()
+            st.rerun()
     
     st.markdown("---")
     
@@ -1619,6 +1744,175 @@ def scanner_view(worksheet):
                 st.warning("⚠️ Prosím, zadaj meno.")
 
 
+def docs_view():
+    """Pohľad pre dokumentáciu aplikácie - chránená heslom."""
+    st.title("📚 Dokumentácia")
+    
+    # Kontrola prihlásenia
+    if 'docs_authenticated' not in st.session_state:
+        st.session_state.docs_authenticated = False
+    
+    if not st.session_state.docs_authenticated:
+        st.markdown("### 🔐 Prístup k dokumentácii")
+        st.info("Pre zobrazenie dokumentácie zadaj heslo.")
+        
+        password = st.text_input("Heslo", type="password", key="docs_password")
+        
+        if st.button("Prihlásiť sa", type="primary", use_container_width=True):
+            if password == DOCS_PASSWORD:
+                st.session_state.docs_authenticated = True
+                st.rerun()
+            else:
+                st.error("❌ Nesprávne heslo")
+        return
+    
+    # Tlačidlo na odhlásenie
+    if st.button("🚪 Odhlásiť sa", key="docs_logout"):
+        st.session_state.docs_authenticated = False
+        st.rerun()
+    
+    st.markdown("---")
+    
+    # Dokumentácia
+    st.markdown("""
+    ## 🥊 Giant Gym - Aplikácia na evidenciu dochádzky
+    
+    Táto aplikácia slúži na evidenciu dochádzky členov na tréningy v Giant Gym.
+    
+    ---
+    
+    ### 📱 Ako funguje prihlasovanie
+    
+    1. **Člen naskenuje QR kód** - každý člen má svoju osobnú klubovú kartu s QR kódom
+    2. **Automatické prihlásenie** - po naskenovaní sa člen automaticky prihlási na najbližší tréning
+    3. **Údaje sa uložia** - dochádzka sa uloží do Google Sheets
+    
+    ---
+    
+    ### ⏰ Logika automatického výberu času tréningu
+    
+    Aplikácia automaticky vyberá čas tréningu podľa aktuálneho času:
+    
+    | Aktuálny čas | Vybraný tréning |
+    |--------------|-----------------|
+    | 00:00 - 09:59 | **9:00** (ranný) |
+    | 10:00 - 17:59 | **17:00** (popoludňajší) |
+    | 18:00 - 23:59 | **18:30** (večerný) |
+    
+    ---
+    
+    ### 🎴 Klubové karty
+    
+    Každý člen si môže vygenerovať osobnú klubovú kartu:
+    
+    1. Choď na **Účastník** → **Vygenerovať klubovú kartu**
+    2. Zadaj meno a typ členstva
+    3. Stiahni kartu ako PNG obrázok
+    4. Kartu môžeš:
+       - Uložiť do galérie telefónu
+       - Vytlačiť a nosiť so sebou
+       - Nastaviť ako wallpaper pre rýchly prístup
+    
+    ---
+    
+    ### 📷 QR Scanner v gyme
+    
+    Pre hromadné skenovanie členov v gyme:
+    
+    **URL:** `https://giantgym.streamlit.app/?view=scanner`
+    
+    - Otvor túto URL na počítači s webkamerou
+    - Členovia postupne skenujú svoje QR kódy
+    - Po naskenovaní sa zobrazí potvrdenie a scanner je pripravený na ďalšieho člena
+    
+    ---
+    
+    ### 👨‍🏫 Trénerský prístup
+    
+    Tréner má prístup k:
+    
+    - **Zoznam prihlásených** - aktuálna dochádzka na dnešný deň
+    - **Vymazanie dochádzky** - možnosť odstrániť nesprávne prihlásenia
+    - **Štatistiky** - prehľad dochádzky za obdobie
+    
+    **Heslo pre trénera:** rovnaké ako pre dokumentáciu
+    
+    ---
+    
+    ### 📊 Štatistiky
+    
+    Dostupné štatistiky:
+    
+    - Celkový počet prihlásení
+    - Prihlásenia podľa dňa
+    - Prihlásenia podľa typu členstva
+    - Prihlásenia podľa času tréningu
+    - Export do CSV
+    
+    ---
+    
+    ### 🔗 URL parametre
+    
+    Aplikácia podporuje nasledovné URL parametre:
+    
+    | Parameter | Popis | Príklad |
+    |-----------|-------|---------|
+    | `view` | Pohľad aplikácie | `participant`, `trainer`, `scanner`, `statistics`, `docs` |
+    | `name` | Meno člena | `Ján%20Novák` |
+    | `membership` | Typ členstva | `Mesačné%20členstvo` |
+    | `time` | Čas tréningu | `17:00` |
+    | `auto` | Automatické prihlásenie | `1` |
+    
+    **Príklad kompletnej URL:**
+    ```
+    https://giantgym.streamlit.app/?view=participant&name=Ján%20Novák&membership=Mesačné%20členstvo&auto=1
+    ```
+    
+    ---
+    
+    ### 🗄️ Google Sheets štruktúra
+    
+    Údaje sa ukladajú do Google Sheets s nasledovnými stĺpcami:
+    
+    | Stĺpec | Popis |
+    |--------|-------|
+    | Dátum | Dátum prihlásenia (DD.MM.YYYY) |
+    | Čas | Čas tréningu |
+    | Meno | Meno a priezvisko člena |
+    | Typ členstva | Typ členstva |
+    | Čas prihlásenia | Presný čas prihlásenia (HH:MM:SS) |
+    
+    ---
+    
+    ### ⚙️ Technické informácie
+    
+    - **Framework:** Streamlit
+    - **Databáza:** Google Sheets
+    - **QR kódy:** qrcode + PIL
+    - **Časové pásmo:** Europe/Bratislava
+    - **Hosting:** Streamlit Cloud
+    
+    ---
+    
+    ### 🆘 Riešenie problémov
+    
+    **Kamera nefunguje v scanneri:**
+    - Povoľ prístup ku kamere v prehliadači
+    - Použi Chrome alebo Safari
+    - Skontroluj, či nie je kamera používaná inou aplikáciou
+    
+    **QR kód sa nedá naskenovať:**
+    - Uisti sa, že QR kód je dobre osvetlený
+    - Drž telefón stabilne
+    - Skús priblížiť alebo oddialiť kameru
+    
+    **Prihlásenie sa neuložilo:**
+    - Skontroluj internetové pripojenie
+    - Počkaj na zelené potvrdenie
+    - V prípade problémov použi manuálne prihlásenie v trénerskom view
+    """)
+
+
 def main():
     """Hlavná funkcia aplikácie."""
     
@@ -1840,6 +2134,10 @@ def main():
             st.query_params["view"] = "wallet"
             st.rerun()
         
+        if st.button("📚 Dokumentácia", use_container_width=True):
+            st.query_params["view"] = "docs"
+            st.rerun()
+        
         st.markdown("---")
         # Zobrazenie lokálneho dátumu
         today = get_local_time().date()
@@ -1854,6 +2152,8 @@ def main():
         wallet_pass_view()
     elif view == "scanner":
         scanner_view(worksheet)
+    elif view == "docs":
+        docs_view()
     else:
         participant_view(worksheet, query_params)
 

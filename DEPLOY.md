@@ -152,3 +152,7 @@ Streamlit Cloud automaticky deteguje zmeny a re-deployuje aplikáciu.
 **Pre trénera:** `https://YOUR_APP_NAME.streamlit.app/?view=trainer`
 **Pre štatistiky:** `https://YOUR_APP_NAME.streamlit.app/?view=statistics`
 
+
+
+
+

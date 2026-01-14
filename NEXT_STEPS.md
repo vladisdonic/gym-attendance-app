@@ -169,3 +169,7 @@ Streamlit Cloud automaticky deteguje zmeny a re-deployuje aplikáciu (zvyčajne 
 
 **Veľa šťastia s nasadením! 🚀**
 
+
+
+
+

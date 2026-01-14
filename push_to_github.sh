@@ -49,3 +49,7 @@ else
     echo "3. Alebo nastav SSH kľúč"
 fi
 
+
+
+
+

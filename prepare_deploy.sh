@@ -70,3 +70,7 @@ echo "📖 Podrobný návod nájdeš v súbore DEPLOY.md"
 echo ""
 echo "✅ Projekt je pripravený na deploy!"
 
+
+
+
+

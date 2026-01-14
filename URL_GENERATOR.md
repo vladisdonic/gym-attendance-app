@@ -193,3 +193,7 @@ https://giantgym.streamlit.app/?view=participant&name=Meno%20Priezvisko&membersh
 **Vytvorené:** Pre aplikáciu Giant Gym Attendance
 **URL aplikácie:** https://giantgym.streamlit.app
 
+
+
+
+
