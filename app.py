@@ -413,18 +413,19 @@ def generate_club_card(name, membership, qr_url):
     qr_img = qr.make_image(fill_color='black', back_color='white')
     qr_img = qr_img.convert('RGB')
     
-    # Veľkosť QR kódu
-    qr_size = 220
+    # Veľkosť QR kódu - väčšia časť karty
+    qr_size = 420
     qr_img = qr_img.resize((qr_size, qr_size), Image.Resampling.LANCZOS)
     
-    # Biely zaoblený obdĺžnik pre QR kód
-    qr_box_width = card_width - 80
-    qr_box_height = 280
-    qr_box_x = 40
-    qr_box_y = card_height - qr_box_height - 40
+    # Biely zaoblený obdĺžnik pre QR kód - väčší
+    qr_box_padding = 30
+    qr_box_width = qr_size + qr_box_padding * 2
+    qr_box_height = qr_size + qr_box_padding * 2
+    qr_box_x = (card_width - qr_box_width) // 2
+    qr_box_y = card_height - qr_box_height - 50
     
     # Kreslenie bieleho zaokrúhleného obdĺžnika
-    qr_box_radius = 20
+    qr_box_radius = 25
     draw.rounded_rectangle(
         [(qr_box_x, qr_box_y), (qr_box_x + qr_box_width, qr_box_y + qr_box_height)],
         radius=qr_box_radius,
@@ -432,8 +433,8 @@ def generate_club_card(name, membership, qr_url):
     )
     
     # Vloženie QR kódu do stredu bieleho boxu
-    qr_x = qr_box_x + (qr_box_width - qr_size) // 2
-    qr_y = qr_box_y + (qr_box_height - qr_size) // 2
+    qr_x = qr_box_x + qr_box_padding
+    qr_y = qr_box_y + qr_box_padding
     card.paste(qr_img, (qr_x, qr_y))
     
     # Uloženie do bufferu
