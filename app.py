@@ -325,23 +325,21 @@ def generate_club_card(name, membership, qr_url):
     card_width = 600
     card_height = 900
     
-    # Klubové farby Giant Gym - červená a biela
-    primary_color = '#E31E24'  # Červená Giant Gym
-    secondary_color = '#C41920'  # Tmavšia červená pre gradient
+    # Klubové farby Giant Gym - čierna s červenými akcentami
+    primary_color = '#0a0a0a'  # Čierna
+    accent_color = '#E31E24'  # Červená Giant Gym
     text_color = '#FFFFFF'  # Biela
     
     # Vytvorenie karty
     card = Image.new('RGB', (card_width, card_height), primary_color)
     draw = ImageDraw.Draw(card)
     
-    # Gradient pozadie - jemný prechod
+    # Gradient pozadie - jemný prechod od tmavo šedej po čiernu
     for y in range(card_height):
         ratio = y / card_height
-        r = int(227 - ratio * 30)
-        g = int(30 - ratio * 10)
-        b = int(36 - ratio * 12)
+        shade = int(20 - ratio * 15)
         for x in range(card_width):
-            draw.point((x, y), fill=(max(0, r), max(0, g), max(0, b)))
+            draw.point((x, y), fill=(shade, shade, shade))
     
     # Zaoblené rohy - vytvoríme masku
     corner_radius = 40
