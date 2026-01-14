@@ -311,6 +311,7 @@ def get_next_training_time():
 def generate_club_card(name, membership, qr_url):
     """
     Generuje klubovú kartu s QR kódom ako PNG obrázok.
+    Vertikálna orientácia v štýle Decathlon karty.
     
     Args:
         name: Meno člena
@@ -320,108 +321,122 @@ def generate_club_card(name, membership, qr_url):
     Returns:
         bytes: PNG obrázok klubovej karty
     """
-    # Rozmery karty (štandardný pomer 85.6 x 54 mm, 300 DPI)
-    card_width = 1012
-    card_height = 638
+    # Rozmery karty - vertikálna orientácia (podobne ako Decathlon)
+    card_width = 600
+    card_height = 900
     
-    # Vytvorenie karty s gradientom
-    card = Image.new('RGB', (card_width, card_height), '#1a1a2e')
+    # Klubové farby Giant Gym - červená a biela
+    primary_color = '#E31E24'  # Červená Giant Gym
+    secondary_color = '#C41920'  # Tmavšia červená pre gradient
+    text_color = '#FFFFFF'  # Biela
+    
+    # Vytvorenie karty
+    card = Image.new('RGB', (card_width, card_height), primary_color)
     draw = ImageDraw.Draw(card)
     
-    # Gradient pozadie - tmavo modrá až čierna
+    # Gradient pozadie - jemný prechod
     for y in range(card_height):
-        # Gradient od tmavo modrej (#1a1a2e) po čiernu (#0f0f1a)
-        r = int(26 - (y / card_height) * 11)
-        g = int(26 - (y / card_height) * 11)
-        b = int(46 - (y / card_height) * 20)
+        ratio = y / card_height
+        r = int(227 - ratio * 30)
+        g = int(30 - ratio * 10)
+        b = int(36 - ratio * 12)
         for x in range(card_width):
-            draw.point((x, y), fill=(r, g, b))
+            draw.point((x, y), fill=(max(0, r), max(0, g), max(0, b)))
     
-    # Dekoratívne prvky - červené akcenty
-    # Horná lišta
-    draw.rectangle([(0, 0), (card_width, 8)], fill='#e63946')
-    # Spodná lišta
-    draw.rectangle([(0, card_height - 8), (card_width, card_height)], fill='#e63946')
+    # Zaoblené rohy - vytvoríme masku
+    corner_radius = 40
     
-    # Diagonálny dekoratívny prvok
-    for i in range(3):
-        offset = i * 15
-        draw.polygon([
-            (card_width - 200 - offset, 0),
-            (card_width - 150 - offset, 0),
-            (card_width - offset, card_height),
-            (card_width - 50 - offset, card_height)
-        ], fill='#e6394620')
-    
-    # Fonty - používame základné fonty dostupné v PIL
+    # Fonty
     try:
-        # Skúsime načítať systémový font
-        title_font = ImageFont.truetype("/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf", 48)
-        name_font = ImageFont.truetype("/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf", 36)
-        membership_font = ImageFont.truetype("/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf", 24)
-        small_font = ImageFont.truetype("/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf", 16)
+        logo_font = ImageFont.truetype("/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf", 72)
+        name_font = ImageFont.truetype("/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf", 32)
+        membership_font = ImageFont.truetype("/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf", 42)
+        small_font = ImageFont.truetype("/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf", 18)
     except:
         try:
-            # Alternatívne fonty pre macOS/Windows
-            title_font = ImageFont.truetype("Arial Bold.ttf", 48)
-            name_font = ImageFont.truetype("Arial Bold.ttf", 36)
-            membership_font = ImageFont.truetype("Arial.ttf", 24)
-            small_font = ImageFont.truetype("Arial.ttf", 16)
+            logo_font = ImageFont.truetype("/System/Library/Fonts/Helvetica.ttc", 72)
+            name_font = ImageFont.truetype("/System/Library/Fonts/Helvetica.ttc", 32)
+            membership_font = ImageFont.truetype("/System/Library/Fonts/Helvetica.ttc", 42)
+            small_font = ImageFont.truetype("/System/Library/Fonts/Helvetica.ttc", 18)
         except:
-            # Fallback na default font
-            title_font = ImageFont.load_default()
+            logo_font = ImageFont.load_default()
             name_font = ImageFont.load_default()
             membership_font = ImageFont.load_default()
             small_font = ImageFont.load_default()
     
-    # Názov gymu
-    draw.text((40, 30), "GIANT GYM", font=title_font, fill='#e63946')
-    draw.text((40, 85), "ČLENSKÁ KARTA", font=membership_font, fill='#888888')
+    # Logo Giant Gym - pokus o načítanie loga
+    try:
+        import os
+        logo_path = os.path.join(os.path.dirname(__file__), 'giantgym.png')
+        if os.path.exists(logo_path):
+            logo = Image.open(logo_path)
+            # Zväčšenie loga
+            logo_width = 350
+            logo_ratio = logo_width / logo.width
+            logo_height = int(logo.height * logo_ratio)
+            logo = logo.resize((logo_width, logo_height), Image.Resampling.LANCZOS)
+            
+            # Centrovanie loga hore
+            logo_x = (card_width - logo_width) // 2
+            logo_y = 50
+            
+            # Ak má logo alpha kanál, použijeme ho ako masku
+            if logo.mode == 'RGBA':
+                card.paste(logo, (logo_x, logo_y), logo)
+            else:
+                card.paste(logo, (logo_x, logo_y))
+        else:
+            # Fallback - textové logo
+            draw.text((card_width // 2, 80), "GIANT", font=logo_font, fill=text_color, anchor="mm")
+            draw.text((card_width // 2, 140), "GYM", font=logo_font, fill=text_color, anchor="mm")
+    except:
+        # Fallback - textové logo
+        draw.text((card_width // 2, 80), "GIANT", font=logo_font, fill=text_color, anchor="mm")
+        draw.text((card_width // 2, 140), "GYM", font=logo_font, fill=text_color, anchor="mm")
     
-    # Meno člena
-    draw.text((40, 160), name.upper(), font=name_font, fill='#ffffff')
+    # Meno člena - v strede karty
+    name_y = 380
+    draw.text((50, name_y), name.upper(), font=name_font, fill=text_color)
     
-    # Typ členstva
-    membership_label = f"• {membership}"
-    draw.text((40, 210), membership_label, font=membership_font, fill='#e63946')
+    # Typ členstva pod menom
+    membership_y = name_y + 50
+    draw.text((50, membership_y), membership, font=membership_font, fill=text_color)
     
     # QR kód - generovanie
     qr = qrcode.QRCode(
         version=1,
         error_correction=qrcode.constants.ERROR_CORRECT_H,
-        box_size=8,
+        box_size=10,
         border=2
     )
     qr.add_data(qr_url)
     qr.make(fit=True)
     
-    qr_img = qr.make_image(fill_color='#ffffff', back_color='#1a1a2e')
+    qr_img = qr.make_image(fill_color='black', back_color='white')
     qr_img = qr_img.convert('RGB')
     
-    # Zväčšenie QR kódu
-    qr_size = 250
+    # Veľkosť QR kódu
+    qr_size = 220
     qr_img = qr_img.resize((qr_size, qr_size), Image.Resampling.LANCZOS)
     
-    # Pozícia QR kódu - vpravo dole s okrajom
-    qr_x = card_width - qr_size - 40
-    qr_y = card_height - qr_size - 50
+    # Biely zaoblený obdĺžnik pre QR kód
+    qr_box_width = card_width - 80
+    qr_box_height = 280
+    qr_box_x = 40
+    qr_box_y = card_height - qr_box_height - 40
     
-    # Biely rámček okolo QR kódu
-    border = 8
-    draw.rectangle([
-        (qr_x - border, qr_y - border),
-        (qr_x + qr_size + border, qr_y + qr_size + border)
-    ], fill='#ffffff', outline='#e63946', width=3)
+    # Kreslenie bieleho zaokrúhleného obdĺžnika
+    qr_box_radius = 20
+    draw.rounded_rectangle(
+        [(qr_box_x, qr_box_y), (qr_box_x + qr_box_width, qr_box_y + qr_box_height)],
+        radius=qr_box_radius,
+        fill='white'
+    )
     
-    # Vloženie QR kódu
+    # Vloženie QR kódu do stredu bieleho boxu
+    qr_x = qr_box_x + (qr_box_width - qr_size) // 2
+    qr_y = qr_box_y + (qr_box_height - qr_size) // 2
     card.paste(qr_img, (qr_x, qr_y))
-    
-    # Text pod QR kódom
-    scan_text = "NASKENUJ PRE PRIHLÁSENIE"
-    draw.text((qr_x - 30, qr_y + qr_size + 20), scan_text, font=small_font, fill='#888888')
-    
-    # Dekoratívny prvok - boxerská päsť (emoji simulácia textom)
-    draw.text((40, card_height - 80), "🥊", font=title_font, fill='#ffffff')
     
     # Uloženie do bufferu
     buffer = io.BytesIO()
