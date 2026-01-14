@@ -392,12 +392,12 @@ def generate_club_card(name, membership, qr_url):
         draw.text((card_width // 2, 80), "GIANT", font=logo_font, fill=text_color, anchor="mm")
         draw.text((card_width // 2, 140), "GYM", font=logo_font, fill=text_color, anchor="mm")
     
-    # Meno člena - v strede karty
-    name_y = 380
+    # Meno člena - pod logom
+    name_y = 220
     draw.text((50, name_y), name.upper(), font=name_font, fill=text_color)
     
     # Typ členstva pod menom
-    membership_y = name_y + 50
+    membership_y = name_y + 45
     draw.text((50, membership_y), membership, font=membership_font, fill=text_color)
     
     # QR kód - generovanie
