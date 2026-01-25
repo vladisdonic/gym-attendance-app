@@ -366,7 +366,8 @@ def prepare_attendance_dataframe(client, spreadsheet_id, df=None):
         df['Dátum_only'] = df['Dátum_parsed'].dt.date
         df['Týždeň'] = df['Dátum_parsed'].dt.to_period('W')
         df['Mesiac'] = df['Dátum_parsed'].dt.to_period('M')
-        df['Deň_v_týždni'] = df['Dátum_parsed'].dt.day_name()
+        df['Deň_v_týždni'] = df['Dátum_parsed'].dt.dayofweek  # 0 = Monday, 6 = Sunday
+        df['Deň_v_týždni_názov'] = df['Dátum_parsed'].dt.day_name()  # Názov dňa v angličtine
         df['Deň_v_mesiaci'] = df['Dátum_parsed'].dt.day
         df['Týždeň_v_roku'] = df['Dátum_parsed'].dt.isocalendar().week
         
@@ -1609,7 +1610,11 @@ def statistics_view(client, spreadsheet_id):
         st.markdown("#### 📊 Dochádzka podľa dní v týždni")
         day_counts = df.groupby('Deň_v_týždni').size().reset_index(name='Počet')
         day_names = ['Pondelok', 'Utorok', 'Streda', 'Štvrtok', 'Piatok', 'Sobota', 'Nedeľa']
-        day_counts['Deň'] = day_counts['Deň_v_týždni'].apply(lambda x: day_names[x] if x < len(day_names) else '')
+        
+        # Mapovať indexy (0-6) na slovenské názvy dní
+        day_counts['Deň'] = day_counts['Deň_v_týždni'].apply(
+            lambda x: day_names[int(x)] if isinstance(x, (int, float)) and 0 <= int(x) < len(day_names) else 'Neznámy'
+        )
         day_counts = day_counts.sort_values('Deň_v_týždni')
         
         fig = px.bar(
@@ -1692,10 +1697,13 @@ def statistics_view(client, spreadsheet_id):
                 # Vytvoriť pivot tabuľku
                 pivot_data = monthly_daily.pivot(index='Mesiac_názov', columns='Deň_v_týždni', values='Počet').fillna(0)
                 
+                # Definovať názvy dní
+                day_names_heat = ['Pondelok', 'Utorok', 'Streda', 'Štvrtok', 'Piatok', 'Sobota', 'Nedeľa']
+                
                 fig_heat = px.imshow(
                     pivot_data,
                     labels=dict(x="Deň v týždni", y="Mesiac", color="Počet"),
-                    x=[day_names[i] for i in range(7)],
+                    x=[day_names_heat[i] for i in range(7)],
                     color_continuous_scale='YlOrRd',
                     title='Heatmapa dochádzky: Mesiac vs. Deň v týždni',
                     aspect="auto"
