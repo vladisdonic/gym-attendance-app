@@ -17,7 +17,7 @@ https://giantgym.streamlit.app/?view=participant&name=MENO&membership=TYP&time=�
 | `view` | Typ pohľadu | `participant` | Áno |
 | `name` | Meno a priezvisko | `Ján Novák` (URL encoded: `Ján%20Novák`) | Áno pre auto |
 | `membership` | Typ členstva | `Mesačné členstvo`, `Skúšobný tréning`, `Jednorázový vstup`, `Ročné členstvo` | Áno pre auto |
-| `time` | Čas tréningu | `9:00`, `17:00`, `18:30` | Áno pre auto |
+| `time` | Čas tréningu | `7:00`, `9:00`, `15:30`, `17:00`, `18:30` | Áno pre auto |
 | `auto` | Automatické odoslanie | `1` = automaticky, `0` alebo chýba = manuálne | Nie |
 
 ## Typy členstva (presné názvy)
@@ -29,7 +29,9 @@ https://giantgym.streamlit.app/?view=participant&name=MENO&membership=TYP&time=�
 
 ## Časy tréningov
 
+- `7:00`
 - `9:00`
+- `15:30`
 - `17:00`
 - `18:30`
 
@@ -173,17 +175,27 @@ Kde:
 
 ## Príklady pre rôzne scenáre
 
+### Ranný tréning (7:00)
+```
+https://giantgym.streamlit.app/?view=participant&name=Meno%20Priezvisko&membership=Mesačné%20členstvo&time=7:00&auto=1
+```
+
 ### Ranný tréning (9:00)
 ```
 https://giantgym.streamlit.app/?view=participant&name=Meno%20Priezvisko&membership=Mesačné%20členstvo&time=9:00&auto=1
 ```
 
-### Večerný tréning (17:00)
+### Popoludňajší tréning (15:30)
+```
+https://giantgym.streamlit.app/?view=participant&name=Meno%20Priezvisko&membership=Mesačné%20členstvo&time=15:30&auto=1
+```
+
+### Popoludňajší tréning (17:00)
 ```
 https://giantgym.streamlit.app/?view=participant&name=Meno%20Priezvisko&membership=Mesačné%20členstvo&time=17:00&auto=1
 ```
 
-### Neskorý večerný tréning (18:30)
+### Večerný tréning (18:30)
 ```
 https://giantgym.streamlit.app/?view=participant&name=Meno%20Priezvisko&membership=Mesačné%20členstvo&time=18:30&auto=1
 ```

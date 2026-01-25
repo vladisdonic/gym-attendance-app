@@ -15,7 +15,9 @@ MEMBERSHIP_TYPES = [
 
 # Časy tréningov
 TRAINING_TIMES = [
+    "7:00",
     "9:00",
+    "15:30",
     "17:00",
     "18:30"
 ]
@@ -125,7 +127,7 @@ if __name__ == "__main__":
         print("\nČas tréningu:")
         for i, time in enumerate(TRAINING_TIMES, 1):
             print(f"  {i}. {time}")
-        time_choice = input("Vyber číslo (1-3): ").strip()
+        time_choice = input(f"Vyber číslo (1-{len(TRAINING_TIMES)}): ").strip()
         
         try:
             time = TRAINING_TIMES[int(time_choice) - 1]

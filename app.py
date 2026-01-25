@@ -62,7 +62,9 @@ MEMBERSHIP_TYPES = [
 
 # Časy tréningov
 TRAINING_TIMES = [
+    "7:00",
     "9:00",
+    "15:30",
     "17:00",
     "18:30"
 ]
@@ -279,33 +281,46 @@ def get_next_training_time():
     Určí čas tréningu na základe aktuálneho času.
     
     Logika prihlásenia:
-    - 00:00 - 09:59 → prihlásenie na 9:00 (ranný tréning)
-    - 10:00 - 17:59 → prihlásenie na 17:00 (popoludňajší tréning)
-    - 18:00 - 23:59 → prihlásenie na 18:30 (večerný tréning)
+    - 00:00 - 07:59 → prihlásenie na 7:00 (ranný tréning)
+    - 08:00 - 09:59 → prihlásenie na 9:00 (ranný tréning)
+    - 10:00 - 15:29 → prihlásenie na 15:30 (popoludňajší tréning)
+    - 15:30 - 16:59 → prihlásenie na 17:00 (popoludňajší tréning)
+    - 17:00 - 23:59 → prihlásenie na 18:30 (večerný tréning)
     
     Vysvetlenie:
-    - Na tréning o 9:00 sa dá prihlásiť kedykoľvek pred ním alebo do 10:00
-    - Po 10:00 sa automaticky prihlasujem na 17:00
-    - Po 18:00 sa automaticky prihlasujem na 18:30 (platí do konca dňa)
-    - Po polnoci sa prihlasujem na ranný tréning o 9:00
+    - Na tréning o 7:00 sa dá prihlásiť kedykoľvek pred ním alebo do 8:00
+    - Na tréning o 9:00 sa dá prihlásiť od 8:00 do 10:00
+    - Po 10:00 sa automaticky prihlasujem na 15:30
+    - Po 15:30 sa automaticky prihlasujem na 17:00
+    - Po 17:00 sa automaticky prihlasujem na 18:30 (platí do konca dňa)
+    - Po polnoci sa prihlasujem na ranný tréning o 7:00
     
     Returns:
-        str: Čas tréningu ("9:00", "17:00", alebo "18:30")
+        str: Čas tréningu ("7:00", "9:00", "15:30", "17:00", alebo "18:30")
     """
     # Použiť lokálny čas (Europe/Bratislava)
     now = get_local_time()
     current_hour = now.hour
+    current_minute = now.minute
     
-    # 00:00 - 09:59 → 9:00 (ranný tréning)
+    # 00:00 - 07:59 → 7:00 (ranný tréning)
+    if current_hour < 8:
+        return "7:00"
+    
+    # 08:00 - 09:59 → 9:00 (ranný tréning)
     if current_hour < 10:
         return "9:00"
     
-    # 10:00 - 17:59 → 17:00 (popoludňajší tréning)
-    if current_hour < 18:
+    # 10:00 - 15:29 → 15:30 (popoludňajší tréning)
+    if current_hour < 15 or (current_hour == 15 and current_minute < 30):
+        return "15:30"
+    
+    # 15:30 - 16:59 → 17:00 (popoludňajší tréning)
+    if current_hour < 17:
         return "17:00"
     
-    # 18:00 - 23:59 → 18:30 (večerný tréning)
-        return "18:30"
+    # 17:00 - 23:59 → 18:30 (večerný tréning)
+    return "18:30"
     
 
 def generate_club_card(name, membership, qr_url):
@@ -1541,15 +1556,21 @@ def scanner_view(worksheet):
                     const membership = params.get('membership') || '';
                 
                 // Automatický výber času ak nie je v QR kóde
-                // 00:00-09:59 → 9:00, 10:00-17:59 → 17:00, 18:00-23:59 → 18:30
+                // 00:00-07:59 → 7:00, 08:00-09:59 → 9:00, 10:00-15:29 → 15:30, 15:30-16:59 → 17:00, 17:00-23:59 → 18:30
                 let time = params.get('time');
                 if (!time) {
-                    const currentHour = new Date().getHours();
-                    if (currentHour < 10) {
+                    const now = new Date();
+                    const currentHour = now.getHours();
+                    const currentMinute = now.getMinutes();
+                    if (currentHour < 8) {
+                        time = '7:00';
+                    } else if (currentHour < 10) {
                         time = '9:00';
-                    } else if (currentHour < 18) {
+                    } else if (currentHour < 15 || (currentHour === 15 && currentMinute < 30)) {
+                        time = '15:30';
+                    } else if (currentHour < 17) {
                         time = '17:00';
-                        } else {
+                    } else {
                         time = '18:30';
                     }
                 }
@@ -1809,9 +1830,11 @@ def docs_view():
     
     | Aktuálny čas | Vybraný tréning |
     |--------------|-----------------|
-    | 00:00 - 09:59 | **9:00** (ranný) |
-    | 10:00 - 17:59 | **17:00** (popoludňajší) |
-    | 18:00 - 23:59 | **18:30** (večerný) |
+    | 00:00 - 07:59 | **7:00** (ranný) |
+    | 08:00 - 09:59 | **9:00** (ranný) |
+    | 10:00 - 15:29 | **15:30** (popoludňajší) |
+    | 15:30 - 16:59 | **17:00** (popoludňajší) |
+    | 17:00 - 23:59 | **18:30** (večerný) |
     
     ---
     
