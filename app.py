@@ -218,8 +218,34 @@ def get_all_worksheets(client, spreadsheet_id):
         return []
 
 
-def get_all_attendance_data(client, spreadsheet_id):
-    """Získanie všetkých dát o účasti zo všetkých hárkov."""
+def get_all_attendance_data(client, spreadsheet_id, use_cache=True, cache_ttl=300):
+    """
+    Získanie všetkých dát o účasti zo všetkých hárkov.
+    
+    Args:
+        client: Google Sheets klient
+        spreadsheet_id: ID spreadsheetu
+        use_cache: Použiť cache (default: True)
+        cache_ttl: Cache TTL v sekundách (default: 300 = 5 minút)
+    
+    Returns:
+        DataFrame s dátami o dochádzke
+    """
+    import time
+    
+    # Cache key
+    cache_key = f'attendance_data_{spreadsheet_id}'
+    cache_time_key = f'attendance_data_time_{spreadsheet_id}'
+    
+    # Skontrolovať cache
+    if use_cache and cache_key in st.session_state:
+        cache_time = st.session_state.get(cache_time_key, 0)
+        current_time = time.time()
+        
+        # Ak je cache ešte platný (menej ako cache_ttl sekúnd starý)
+        if current_time - cache_time < cache_ttl:
+            return st.session_state[cache_key].copy()
+    
     try:
         worksheets = get_all_worksheets(client, spreadsheet_id)
         all_data = []
@@ -239,17 +265,53 @@ def get_all_attendance_data(client, spreadsheet_id):
                 continue
         
         if all_data:
-            return pd.concat(all_data, ignore_index=True)
+            result_df = pd.concat(all_data, ignore_index=True)
+            
+            # Uložiť do cache
+            if use_cache:
+                st.session_state[cache_key] = result_df.copy()
+                st.session_state[cache_time_key] = time.time()
+            
+            return result_df
         return pd.DataFrame()
     except Exception as e:
+        error_msg = str(e)
+        
+        # Špeciálna správa pre API quota exceeded
+        if '429' in error_msg or 'Quota exceeded' in error_msg or 'quota' in error_msg.lower():
+            st.warning("⚠️ **API limit prekročený**")
+            st.info("""
+            Google Sheets API má limit na počet požiadaviek za minútu. 
+            Aplikácia používa cache na zníženie počtu volaní.
+            
+            **Riešenie:**
+            - Počkaj 1-2 minúty a skús znova
+            - Použi tlačidlo "💾 Obnoviť cache" len keď je to nevyhnutné
+            - Cache sa automaticky obnoví každých 5 minút
+            """)
+            
+            # Skúsiť vrátiť cache aj keď je starý
+            if use_cache and cache_key in st.session_state:
+                st.info("📦 Zobrazujem dáta z cache (môžu byť staršie)")
+                return st.session_state[cache_key].copy()
+        
         st.error(f"Chyba pri načítaní všetkých dát: {e}")
         return pd.DataFrame()
 
 
-def get_monthly_statistics(client, spreadsheet_id):
-    """Výpočet štatistík za jednotlivé mesiace - top 3 najaktívnejší členovia."""
+def get_monthly_statistics(client, spreadsheet_id, df=None):
+    """
+    Výpočet štatistík za jednotlivé mesiace - top 3 najaktívnejší členovia.
+    
+    Args:
+        client: Google Sheets klient (použije sa len ak df nie je poskytnutý)
+        spreadsheet_id: ID spreadsheetu (použije sa len ak df nie je poskytnutý)
+        df: DataFrame s dátami (voliteľné, ak nie je poskytnutý, načíta sa)
+    """
     try:
-        df = get_all_attendance_data(client, spreadsheet_id)
+        # Ak nie je poskytnutý DataFrame, načítať ho
+        if df is None:
+            df = get_all_attendance_data(client, spreadsheet_id)
         
         if df.empty:
             return {}
@@ -279,10 +341,19 @@ def get_monthly_statistics(client, spreadsheet_id):
         return {}
 
 
-def prepare_attendance_dataframe(client, spreadsheet_id):
-    """Pripraví DataFrame s dátami o dochádzke pre analýzy."""
+def prepare_attendance_dataframe(client, spreadsheet_id, df=None):
+    """
+    Pripraví DataFrame s dátami o dochádzke pre analýzy.
+    
+    Args:
+        client: Google Sheets klient (použije sa len ak df nie je poskytnutý)
+        spreadsheet_id: ID spreadsheetu (použije sa len ak df nie je poskytnutý)
+        df: DataFrame s dátami (voliteľné, ak nie je poskytnutý, načíta sa)
+    """
     try:
-        df = get_all_attendance_data(client, spreadsheet_id)
+        # Ak nie je poskytnutý DataFrame, načítať ho
+        if df is None:
+            df = get_all_attendance_data(client, spreadsheet_id)
         
         if df.empty:
             return pd.DataFrame()
@@ -1298,19 +1369,58 @@ def statistics_view(client, spreadsheet_id):
     st.markdown("---")
     
     # Tlačidlá na obnovenie a odhlásenie
-    col1, col2 = st.columns([3, 1])
+    col1, col2, col3 = st.columns([2, 1, 1])
     with col1:
         if st.button("🔄 Obnoviť štatistiky", use_container_width=True):
+            # Vymazať cache pre vynútené obnovenie
+            cache_key = f'attendance_data_{spreadsheet_id}'
+            cache_time_key = f'attendance_data_time_{spreadsheet_id}'
+            if cache_key in st.session_state:
+                del st.session_state[cache_key]
+            if cache_time_key in st.session_state:
+                del st.session_state[cache_time_key]
             st.rerun()
     with col2:
+        if st.button("💾 Obnoviť cache", use_container_width=True, help="Vynútiť nové načítanie dát z Google Sheets"):
+            # Vymazať cache
+            cache_key = f'attendance_data_{spreadsheet_id}'
+            cache_time_key = f'attendance_data_time_{spreadsheet_id}'
+            if cache_key in st.session_state:
+                del st.session_state[cache_key]
+            if cache_time_key in st.session_state:
+                del st.session_state[cache_time_key]
+            st.rerun()
+    with col3:
         if st.button("🚪 Odhlásiť sa", use_container_width=True):
             st.session_state.trainer_authenticated = False
             st.rerun()
     
-    # Načítanie dát
+    # Načítanie dát s cache
+    cache_key = f'attendance_data_{spreadsheet_id}'
+    cache_time_key = f'attendance_data_time_{spreadsheet_id}'
+    is_cached = cache_key in st.session_state
+    
     with st.spinner("Načítavam dáta..."):
-        df = prepare_attendance_dataframe(client, spreadsheet_id)
-        monthly_stats = get_monthly_statistics(client, spreadsheet_id)
+        # Načítať dáta len raz (s cache)
+        raw_df = get_all_attendance_data(client, spreadsheet_id, use_cache=True, cache_ttl=300)
+        
+        # Pripraviť DataFrame pre analýzy (bez ďalšieho API volania)
+        df = prepare_attendance_dataframe(client, spreadsheet_id, df=raw_df)
+        
+        # Vypočítať štatistiky (bez ďalšieho API volania)
+        monthly_stats = get_monthly_statistics(client, spreadsheet_id, df=raw_df)
+    
+    # Zobraziť informáciu o cache
+    if is_cached and cache_time_key in st.session_state:
+        import time
+        cache_age = int(time.time() - st.session_state[cache_time_key])
+        cache_age_min = cache_age // 60
+        cache_age_sec = cache_age % 60
+        
+        if cache_age < 300:  # Menej ako 5 minút
+            st.info(f"💾 Dáta z cache (staré {cache_age_min}m {cache_age_sec}s). Pre najnovšie dáta klikni 'Obnoviť cache'.")
+        else:
+            st.warning(f"⚠️ Cache je starý ({cache_age_min}m {cache_age_sec}s). Dáta sa automaticky obnovia pri ďalšom načítaní.")
     
     if df.empty:
         st.info("Zatiaľ nie sú dostupné žiadne dáta pre analýzu.")
