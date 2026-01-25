@@ -482,25 +482,50 @@ def create_attendance_heatmap(df):
     
     # Vytvoriť pivot tabuľku pre heatmapu
     if len(daily_counts) > 0:
-        # Zoskupiť podľa týždňa a dňa v týždni
-        heatmap_data = daily_counts.groupby(['Týždeň', 'Deň_v_týždni'])['Počet'].sum().reset_index()
-        
-        # Vytvoriť pivot tabuľku
-        pivot_table = heatmap_data.pivot(index='Týždeň', columns='Deň_v_týždni', values='Počet').fillna(0)
-        
-        # Vytvoriť heatmapu pomocou plotly
-        day_names = ['Pondelok', 'Utorok', 'Streda', 'Štvrtok', 'Piatok', 'Sobota', 'Nedeľa']
-        
-        fig = px.imshow(
-            pivot_table,
-            labels=dict(x="Deň v týždni", y="Týždeň v roku", color="Počet prihlásení"),
-            x=[day_names[i] for i in range(7)],
-            color_continuous_scale='YlOrRd',
-            title='Heatmapa dochádzky (Týždeň vs. Deň v týždni)',
-            aspect="auto"
-        )
-        
-        return fig
+        try:
+            # Zoskupiť podľa týždňa a dňa v týždni
+            heatmap_data = daily_counts.groupby(['Týždeň', 'Deň_v_týždni'])['Počet'].sum().reset_index()
+            
+            if heatmap_data.empty:
+                return None
+            
+            # Vytvoriť pivot tabuľku
+            pivot_table = heatmap_data.pivot(index='Týždeň', columns='Deň_v_týždni', values='Počet').fillna(0)
+            
+            # Kontrola, či pivot_table nie je prázdny
+            if pivot_table.empty or len(pivot_table) == 0 or len(pivot_table.columns) == 0:
+                return None
+            
+            # Zabezpečiť, aby pivot_table mal aspoň 7 stĺpcov (pre všetky dni v týždni)
+            # Ak chýbajú nejaké dni, pridať ich s hodnotou 0
+            day_names = ['Pondelok', 'Utorok', 'Streda', 'Štvrtok', 'Piatok', 'Sobota', 'Nedeľa']
+            
+            # Pridať chýbajúce stĺpce (dni v týždni)
+            for day_idx in range(7):
+                if day_idx not in pivot_table.columns:
+                    pivot_table[day_idx] = 0
+            
+            # Zoradiť stĺpce podľa dní v týždni (0-6)
+            pivot_table = pivot_table[[col for col in range(7) if col in pivot_table.columns]]
+            
+            # Kontrola, či pivot_table má správny formát
+            if pivot_table.empty or len(pivot_table.columns) == 0:
+                return None
+            
+            # Vytvoriť heatmapu pomocou plotly
+            fig = px.imshow(
+                pivot_table,
+                labels=dict(x="Deň v týždni", y="Týždeň v roku", color="Počet prihlásení"),
+                x=[day_names[i] for i in pivot_table.columns],
+                color_continuous_scale='YlOrRd',
+                title='Heatmapa dochádzky (Týždeň vs. Deň v týždni)',
+                aspect="auto"
+            )
+            
+            return fig
+        except Exception as e:
+            # V prípade chyby vrátiť None namiesto crashu
+            return None
     
     return None
 
@@ -1694,22 +1719,39 @@ def statistics_view(client, spreadsheet_id):
             monthly_daily = df.groupby(['Mesiac_názov', 'Deň_v_týždni']).size().reset_index(name='Počet')
             
             if not monthly_daily.empty:
-                # Vytvoriť pivot tabuľku
-                pivot_data = monthly_daily.pivot(index='Mesiac_názov', columns='Deň_v_týždni', values='Počet').fillna(0)
-                
-                # Definovať názvy dní
-                day_names_heat = ['Pondelok', 'Utorok', 'Streda', 'Štvrtok', 'Piatok', 'Sobota', 'Nedeľa']
-                
-                fig_heat = px.imshow(
-                    pivot_data,
-                    labels=dict(x="Deň v týždni", y="Mesiac", color="Počet"),
-                    x=[day_names_heat[i] for i in range(7)],
-                    color_continuous_scale='YlOrRd',
-                    title='Heatmapa dochádzky: Mesiac vs. Deň v týždni',
-                    aspect="auto"
-                )
-                fig_heat.update_layout(height=500)
-                st.plotly_chart(fig_heat, use_container_width=True)
+                try:
+                    # Vytvoriť pivot tabuľku
+                    pivot_data = monthly_daily.pivot(index='Mesiac_názov', columns='Deň_v_týždni', values='Počet').fillna(0)
+                    
+                    # Kontrola, či pivot_data nie je prázdny
+                    if pivot_data.empty or len(pivot_data) == 0 or len(pivot_data.columns) == 0:
+                        st.info("Žiadne dáta pre vytvorenie heatmapy podľa mesiacov.")
+                    else:
+                        # Pridať chýbajúce stĺpce (dni v týždni)
+                        for day_idx in range(7):
+                            if day_idx not in pivot_data.columns:
+                                pivot_data[day_idx] = 0
+                        
+                        # Zoradiť stĺpce podľa dní v týždni (0-6)
+                        pivot_data = pivot_data[[col for col in range(7) if col in pivot_data.columns]]
+                        
+                        # Definovať názvy dní
+                        day_names_heat = ['Pondelok', 'Utorok', 'Streda', 'Štvrtok', 'Piatok', 'Sobota', 'Nedeľa']
+                        
+                        fig_heat = px.imshow(
+                            pivot_data,
+                            labels=dict(x="Deň v týždni", y="Mesiac", color="Počet"),
+                            x=[day_names_heat[i] for i in pivot_data.columns],
+                            color_continuous_scale='YlOrRd',
+                            title='Heatmapa dochádzky: Mesiac vs. Deň v týždni',
+                            aspect="auto"
+                        )
+                        fig_heat.update_layout(height=500)
+                        st.plotly_chart(fig_heat, use_container_width=True)
+                except Exception as e:
+                    st.info("Žiadne dáta pre vytvorenie heatmapy podľa mesiacov.")
+            else:
+                st.info("Žiadne dáta pre vytvorenie heatmapy podľa mesiacov.")
         else:
             st.info("Žiadne dáta pre vytvorenie heatmapy.")
     
