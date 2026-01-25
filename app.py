@@ -8,7 +8,7 @@ Aplikácia na evidenciu účasti na tréningoch
 import streamlit as st
 import gspread
 from google.oauth2.service_account import Credentials
-from datetime import datetime, date
+from datetime import datetime, date, timedelta
 import pandas as pd
 import json
 from urllib.parse import unquote, quote
@@ -20,6 +20,9 @@ import hashlib
 import pytz
 from PIL import Image, ImageDraw, ImageFont
 import requests
+import plotly.express as px
+import plotly.graph_objects as go
+from plotly.subplots import make_subplots
 
 # Konfigurácia stránky
 st.set_page_config(
@@ -274,6 +277,160 @@ def get_monthly_statistics(client, spreadsheet_id):
     except Exception as e:
         st.error(f"Chyba pri výpočte štatistík: {e}")
         return {}
+
+
+def prepare_attendance_dataframe(client, spreadsheet_id):
+    """Pripraví DataFrame s dátami o dochádzke pre analýzy."""
+    try:
+        df = get_all_attendance_data(client, spreadsheet_id)
+        
+        if df.empty:
+            return pd.DataFrame()
+        
+        # Konverzia dátumov
+        df['Dátum_parsed'] = pd.to_datetime(df['Dátum'], errors='coerce', format='%Y-%m-%d')
+        df = df.dropna(subset=['Dátum_parsed'])
+        
+        # Pridanie dodatočných stĺpcov pre analýzy
+        df['Dátum_only'] = df['Dátum_parsed'].dt.date
+        df['Týždeň'] = df['Dátum_parsed'].dt.to_period('W')
+        df['Mesiac'] = df['Dátum_parsed'].dt.to_period('M')
+        df['Deň_v_týždni'] = df['Dátum_parsed'].dt.day_name()
+        df['Deň_v_mesiaci'] = df['Dátum_parsed'].dt.day
+        df['Týždeň_v_roku'] = df['Dátum_parsed'].dt.isocalendar().week
+        
+        # Získanie času tréningu
+        time_column = 'Čas tréningu' if 'Čas tréningu' in df.columns else 'Tréning'
+        if time_column in df.columns:
+            df['Čas_tréningu'] = df[time_column]
+        else:
+            df['Čas_tréningu'] = ''
+        
+        return df
+    except Exception as e:
+        st.error(f"Chyba pri príprave dát: {e}")
+        return pd.DataFrame()
+
+
+def get_attendance_trends(df, period='denne'):
+    """Vráti trendy dochádzky podľa periódy (denne/týždenne/mesačne)."""
+    if df.empty:
+        return pd.DataFrame()
+    
+    if period == 'denne':
+        trends = df.groupby('Dátum_only').size().reset_index(name='Počet')
+        trends.columns = ['Dátum', 'Počet']
+        trends = trends.sort_values('Dátum')
+    elif period == 'týždenne':
+        trends = df.groupby('Týždeň').size().reset_index(name='Počet')
+        trends['Týždeň_str'] = trends['Týždeň'].astype(str)
+        trends = trends.sort_values('Týždeň')
+        trends.columns = ['Týždeň', 'Počet', 'Týždeň_str']
+    elif period == 'mesačne':
+        trends = df.groupby('Mesiac').size().reset_index(name='Počet')
+        trends['Mesiac_str'] = trends['Mesiac'].astype(str)
+        trends = trends.sort_values('Mesiac')
+        trends.columns = ['Mesiac', 'Počet', 'Mesiac_str']
+    else:
+        return pd.DataFrame()
+    
+    return trends
+
+
+def get_average_attendance_per_member(df):
+    """Vypočíta priemernú dochádzku na člena."""
+    if df.empty:
+        return 0.0, {}
+    
+    member_counts = df['Meno'].value_counts()
+    if len(member_counts) == 0:
+        return 0.0, {}
+    
+    average = member_counts.mean()
+    member_stats = {
+        'Priemer': average,
+        'Medián': member_counts.median(),
+        'Maximum': member_counts.max(),
+        'Minimum': member_counts.min(),
+        'Celkový_počet_členov': len(member_counts),
+        'Celkový_počet_tréningov': len(df)
+    }
+    
+    return average, member_stats
+
+
+def get_most_active_days_weeks(df):
+    """Vráti najaktívnejšie dni a týždne."""
+    if df.empty:
+        return {}, {}
+    
+    # Najaktívnejšie dni
+    daily_counts = df.groupby('Dátum_only').size().sort_values(ascending=False)
+    top_days = daily_counts.head(10).to_dict()
+    
+    # Najaktívnejšie týždne
+    weekly_counts = df.groupby('Týždeň').size().sort_values(ascending=False)
+    top_weeks = {}
+    for week, count in weekly_counts.head(10).items():
+        top_weeks[str(week)] = count
+    
+    return top_days, top_weeks
+
+
+def get_training_time_comparison(df):
+    """Porovnanie dochádzky medzi rôznymi časmi tréningov."""
+    if df.empty or 'Čas_tréningu' not in df.columns:
+        return pd.DataFrame()
+    
+    time_counts = df['Čas_tréningu'].value_counts().reset_index()
+    time_counts.columns = ['Čas', 'Počet']
+    time_counts = time_counts.sort_values('Čas')
+    
+    return time_counts
+
+
+def create_attendance_heatmap(df):
+    """Vytvorí heatmapu dochádzky (kalendárny pohľad)."""
+    if df.empty:
+        return None
+    
+    # Pripraviť dáta pre heatmapu
+    df['Rok'] = df['Dátum_parsed'].dt.year
+    df['Mesiac_num'] = df['Dátum_parsed'].dt.month
+    df['Deň'] = df['Dátum_parsed'].dt.day
+    
+    # Zoskupiť podľa dátumu
+    daily_counts = df.groupby(['Dátum_only']).size().reset_index(name='Počet')
+    daily_counts['Dátum_parsed'] = pd.to_datetime(daily_counts['Dátum_only'])
+    daily_counts['Rok'] = daily_counts['Dátum_parsed'].dt.year
+    daily_counts['Mesiac'] = daily_counts['Dátum_parsed'].dt.month
+    daily_counts['Deň'] = daily_counts['Dátum_parsed'].dt.day
+    daily_counts['Deň_v_týždni'] = daily_counts['Dátum_parsed'].dt.dayofweek
+    daily_counts['Týždeň'] = daily_counts['Dátum_parsed'].dt.isocalendar().week
+    
+    # Vytvoriť pivot tabuľku pre heatmapu
+    if len(daily_counts) > 0:
+        # Zoskupiť podľa týždňa a dňa v týždni
+        heatmap_data = daily_counts.groupby(['Týždeň', 'Deň_v_týždni'])['Počet'].sum().reset_index()
+        
+        # Vytvoriť pivot tabuľku
+        pivot_table = heatmap_data.pivot(index='Týždeň', columns='Deň_v_týždni', values='Počet').fillna(0)
+        
+        # Vytvoriť heatmapu pomocou plotly
+        day_names = ['Pondelok', 'Utorok', 'Streda', 'Štvrtok', 'Piatok', 'Sobota', 'Nedeľa']
+        
+        fig = px.imshow(
+            pivot_table,
+            labels=dict(x="Deň v týždni", y="Týždeň v roku", color="Počet prihlásení"),
+            x=[day_names[i] for i in range(7)],
+            color_continuous_scale='YlOrRd',
+            title='Heatmapa dochádzky (Týždeň vs. Deň v týždni)',
+            aspect="auto"
+        )
+        
+        return fig
+    
+    return None
 
 
 def get_next_training_time():
@@ -1131,16 +1288,16 @@ def trainer_login():
 
 
 def statistics_view(client, spreadsheet_id):
-    """Pohľad so štatistikami - najaktívnejší členovia za mesiace."""
+    """Pohľad so štatistikami - pokročilé analýzy a grafy."""
     # Kontrola autentifikácie
     if not check_trainer_auth():
         trainer_login()
         return
     
-    st.title("📊 Štatistiky")
+    st.title("📊 Pokročilé Štatistiky")
     st.markdown("---")
     
-    # Tlačidlo na odhlásenie
+    # Tlačidlá na obnovenie a odhlásenie
     col1, col2 = st.columns([3, 1])
     with col1:
         if st.button("🔄 Obnoviť štatistiky", use_container_width=True):
@@ -1150,46 +1307,335 @@ def statistics_view(client, spreadsheet_id):
             st.session_state.trainer_authenticated = False
             st.rerun()
     
-    # Načítanie štatistík
-    with st.spinner("Načítavam štatistiky..."):
+    # Načítanie dát
+    with st.spinner("Načítavam dáta..."):
+        df = prepare_attendance_dataframe(client, spreadsheet_id)
         monthly_stats = get_monthly_statistics(client, spreadsheet_id)
     
-    if monthly_stats:
-        # Zoradenie mesiacov od najnovšieho
-        sorted_months = sorted(monthly_stats.keys(), reverse=True)
+    if df.empty:
+        st.info("Zatiaľ nie sú dostupné žiadne dáta pre analýzu.")
+        return
+    
+    # Taby pre rôzne sekcie štatistík
+    tab1, tab2, tab3, tab4, tab5, tab6 = st.tabs([
+        "📈 Trendy", 
+        "👥 Priemerná dochádzka", 
+        "🏆 Najaktívnejšie", 
+        "⏰ Časy tréningov", 
+        "🗓️ Heatmapa", 
+        "📅 Top členovia"
+    ])
+    
+    # TAB 1: Trendy dochádzky
+    with tab1:
+        st.markdown("### 📈 Trendy dochádzky")
+        st.markdown("---")
         
-        for month in sorted_months:
-            stats = monthly_stats[month]
-            if stats:
-                # Formátovanie názvu mesiaca
-                try:
-                    year, month_num = month.split('-')
-                    month_names = {
-                        '01': 'Január', '02': 'Február', '03': 'Marec',
-                        '04': 'Apríl', '05': 'Máj', '06': 'Jún',
-                        '07': 'Júl', '08': 'August', '09': 'September',
-                        '10': 'Október', '11': 'November', '12': 'December'
-                    }
-                    month_name = month_names.get(month_num, month_num)
-                    month_display = f"{month_name} {year}"
-                except:
-                    month_display = month
+        period = st.radio(
+            "Vyber periódu:",
+            ["denne", "týždenne", "mesačne"],
+            horizontal=True,
+            key="trend_period"
+        )
+        
+        trends = get_attendance_trends(df, period)
+        
+        if not trends.empty:
+            if period == 'denne':
+                fig = px.line(
+                    trends, 
+                    x='Dátum', 
+                    y='Počet',
+                    title=f'Denný trend dochádzky',
+                    labels={'Dátum': 'Dátum', 'Počet': 'Počet prihlásení'},
+                    markers=True
+                )
+            elif period == 'týždenne':
+                fig = px.bar(
+                    trends,
+                    x='Týždeň_str',
+                    y='Počet',
+                    title='Týždenný trend dochádzky',
+                    labels={'Týždeň_str': 'Týždeň', 'Počet': 'Počet prihlásení'}
+                )
+                fig.update_xaxes(tickangle=45)
+            else:  # mesačne
+                fig = px.bar(
+                    trends,
+                    x='Mesiac_str',
+                    y='Počet',
+                    title='Mesačný trend dochádzky',
+                    labels={'Mesiac_str': 'Mesiac', 'Počet': 'Počet prihlásení'}
+                )
+                fig.update_xaxes(tickangle=45)
+            
+            fig.update_layout(height=400)
+            st.plotly_chart(fig, use_container_width=True)
+            
+            # Zobrazenie tabuľky
+            with st.expander("📋 Detailné dáta"):
+                st.dataframe(trends, use_container_width=True)
+        else:
+            st.info("Žiadne dáta pre zobrazenie trendov.")
+    
+    # TAB 2: Priemerná dochádzka na člena
+    with tab2:
+        st.markdown("### 👥 Priemerná dochádzka na člena")
+        st.markdown("---")
+        
+        average, member_stats = get_average_attendance_per_member(df)
+        
+        if average > 0:
+            # Metriky
+            col1, col2, col3, col4 = st.columns(4)
+            with col1:
+                st.metric("Priemerná dochádzka", f"{average:.1f}", "tréningov/člen")
+            with col2:
+                st.metric("Medián", f"{member_stats['Medián']:.1f}", "tréningov")
+            with col3:
+                st.metric("Maximum", f"{member_stats['Maximum']}", "tréningov")
+            with col4:
+                st.metric("Celkový počet členov", f"{member_stats['Celkový_počet_členov']}", "")
+            
+            st.markdown("---")
+            
+            # Graf distribúcie dochádzky
+            member_counts = df['Meno'].value_counts()
+            
+            st.markdown("#### 📊 Distribúcia dochádzky")
+            fig = px.histogram(
+                x=member_counts.values,
+                nbins=20,
+                title='Rozdelenie počtu tréningov medzi členmi',
+                labels={'x': 'Počet tréningov', 'y': 'Počet členov'}
+            )
+            fig.update_layout(height=400)
+            st.plotly_chart(fig, use_container_width=True)
+            
+            # Top 10 najaktívnejších
+            st.markdown("#### 🏆 Top 10 najaktívnejších členov")
+            top_members = member_counts.head(10).reset_index()
+            top_members.columns = ['Meno', 'Počet tréningov']
+            top_members['Poradie'] = range(1, len(top_members) + 1)
+            
+            fig = px.bar(
+                top_members,
+                x='Počet tréningov',
+                y='Meno',
+                orientation='h',
+                title='Top 10 najaktívnejších členov',
+                labels={'Počet tréningov': 'Počet tréningov', 'Meno': 'Meno'}
+            )
+            fig.update_layout(height=400, yaxis={'categoryorder': 'total ascending'})
+            st.plotly_chart(fig, use_container_width=True)
+            
+            with st.expander("📋 Zoznam všetkých členov"):
+                all_members = member_counts.reset_index()
+                all_members.columns = ['Meno', 'Počet tréningov']
+                all_members = all_members.sort_values('Počet tréningov', ascending=False)
+                st.dataframe(all_members, use_container_width=True)
+        else:
+            st.info("Žiadne dáta pre výpočet priemernej dochádzky.")
+    
+    # TAB 3: Najaktívnejšie dni a týždne
+    with tab3:
+        st.markdown("### 🏆 Najaktívnejšie dni a týždne")
+        st.markdown("---")
+        
+        top_days, top_weeks = get_most_active_days_weeks(df)
+        
+        col1, col2 = st.columns(2)
+        
+        with col1:
+            st.markdown("#### 📅 Top 10 najaktívnejších dní")
+            if top_days:
+                days_df = pd.DataFrame(list(top_days.items()), columns=['Dátum', 'Počet'])
+                days_df['Dátum'] = pd.to_datetime(days_df['Dátum'])
+                days_df = days_df.sort_values('Počet', ascending=True)
                 
-                st.markdown(f"### 📅 {month_display}")
+                fig = px.bar(
+                    days_df,
+                    x='Počet',
+                    y='Dátum',
+                    orientation='h',
+                    title='Najaktívnejšie dni',
+                    labels={'Počet': 'Počet prihlásení', 'Dátum': 'Dátum'}
+                )
+                fig.update_layout(height=400, yaxis={'categoryorder': 'total ascending'})
+                st.plotly_chart(fig, use_container_width=True)
                 
-                # Zobrazenie top 3
-                cols = st.columns(3)
-                for i, (name, count) in enumerate(stats.items()):
-                    with cols[i]:
-                        st.metric(
-                            label=f"{i+1}. miesto",
-                            value=name,
-                            delta=f"{count} tréningov"
-                        )
+                with st.expander("📋 Zoznam dní"):
+                    days_df_display = days_df.sort_values('Počet', ascending=False)
+                    days_df_display['Dátum'] = days_df_display['Dátum'].dt.strftime('%d.%m.%Y')
+                    st.dataframe(days_df_display[['Dátum', 'Počet']], use_container_width=True)
+            else:
+                st.info("Žiadne dáta pre najaktívnejšie dni.")
+        
+        with col2:
+            st.markdown("#### 📆 Top 10 najaktívnejších týždňov")
+            if top_weeks:
+                weeks_df = pd.DataFrame(list(top_weeks.items()), columns=['Týždeň', 'Počet'])
+                weeks_df = weeks_df.sort_values('Počet', ascending=True)
                 
-                st.markdown("---")
-    else:
-        st.info("Zatiaľ nie sú dostupné žiadne štatistiky.")
+                fig = px.bar(
+                    weeks_df,
+                    x='Počet',
+                    y='Týždeň',
+                    orientation='h',
+                    title='Najaktívnejšie týždne',
+                    labels={'Počet': 'Počet prihlásení', 'Týždeň': 'Týždeň'}
+                )
+                fig.update_layout(height=400, yaxis={'categoryorder': 'total ascending'})
+                st.plotly_chart(fig, use_container_width=True)
+                
+                with st.expander("📋 Zoznam týždňov"):
+                    weeks_df_display = weeks_df.sort_values('Počet', ascending=False)
+                    st.dataframe(weeks_df_display, use_container_width=True)
+            else:
+                st.info("Žiadne dáta pre najaktívnejšie týždne.")
+        
+        # Analýza podľa dní v týždni
+        st.markdown("---")
+        st.markdown("#### 📊 Dochádzka podľa dní v týždni")
+        day_counts = df.groupby('Deň_v_týždni').size().reset_index(name='Počet')
+        day_names = ['Pondelok', 'Utorok', 'Streda', 'Štvrtok', 'Piatok', 'Sobota', 'Nedeľa']
+        day_counts['Deň'] = day_counts['Deň_v_týždni'].apply(lambda x: day_names[x] if x < len(day_names) else '')
+        day_counts = day_counts.sort_values('Deň_v_týždni')
+        
+        fig = px.bar(
+            day_counts,
+            x='Deň',
+            y='Počet',
+            title='Priemerná dochádzka podľa dní v týždni',
+            labels={'Počet': 'Počet prihlásení', 'Deň': 'Deň v týždni'}
+        )
+        fig.update_layout(height=400)
+        st.plotly_chart(fig, use_container_width=True)
+    
+    # TAB 4: Porovnanie časov tréningov
+    with tab4:
+        st.markdown("### ⏰ Porovnanie dochádzky medzi časmi tréningov")
+        st.markdown("---")
+        
+        time_comparison = get_training_time_comparison(df)
+        
+        if not time_comparison.empty:
+            # Graf
+            fig = px.bar(
+                time_comparison,
+                x='Čas',
+                y='Počet',
+                title='Dochádzka podľa času tréningu',
+                labels={'Počet': 'Počet prihlásení', 'Čas': 'Čas tréningu'},
+                color='Počet',
+                color_continuous_scale='Blues'
+            )
+            fig.update_layout(height=400)
+            st.plotly_chart(fig, use_container_width=True)
+            
+            # Koláčový graf
+            fig_pie = px.pie(
+                time_comparison,
+                values='Počet',
+                names='Čas',
+                title='Rozdelenie dochádzky podľa času tréningu'
+            )
+            fig_pie.update_layout(height=400)
+            st.plotly_chart(fig_pie, use_container_width=True)
+            
+            # Metriky
+            st.markdown("#### 📊 Štatistiky")
+            col1, col2, col3 = st.columns(3)
+            with col1:
+                st.metric("Najobľúbenejší čas", time_comparison.loc[time_comparison['Počet'].idxmax(), 'Čas'])
+            with col2:
+                st.metric("Celkový počet", f"{time_comparison['Počet'].sum()}")
+            with col3:
+                st.metric("Priemer na čas", f"{time_comparison['Počet'].mean():.1f}")
+            
+            # Tabuľka
+            with st.expander("📋 Detailné porovnanie"):
+                time_comparison_display = time_comparison.copy()
+                time_comparison_display['Percento'] = (time_comparison_display['Počet'] / time_comparison_display['Počet'].sum() * 100).round(2)
+                st.dataframe(time_comparison_display, use_container_width=True)
+        else:
+            st.info("Žiadne dáta pre porovnanie časov tréningov.")
+    
+    # TAB 5: Heatmapa dochádzky
+    with tab5:
+        st.markdown("### 🗓️ Heatmapa dochádzky (Kalendárny pohľad)")
+        st.markdown("---")
+        
+        heatmap_fig = create_attendance_heatmap(df)
+        
+        if heatmap_fig:
+            st.plotly_chart(heatmap_fig, use_container_width=True)
+            
+            # Alternatívna heatmapa - podľa dní v týždni a mesiacov
+            st.markdown("---")
+            st.markdown("#### 📅 Heatmapa podľa mesiacov a dní")
+            
+            df['Mesiac_názov'] = df['Dátum_parsed'].dt.strftime('%Y-%m')
+            monthly_daily = df.groupby(['Mesiac_názov', 'Deň_v_týždni']).size().reset_index(name='Počet')
+            
+            if not monthly_daily.empty:
+                # Vytvoriť pivot tabuľku
+                pivot_data = monthly_daily.pivot(index='Mesiac_názov', columns='Deň_v_týždni', values='Počet').fillna(0)
+                
+                fig_heat = px.imshow(
+                    pivot_data,
+                    labels=dict(x="Deň v týždni", y="Mesiac", color="Počet"),
+                    x=[day_names[i] for i in range(7)],
+                    color_continuous_scale='YlOrRd',
+                    title='Heatmapa dochádzky: Mesiac vs. Deň v týždni',
+                    aspect="auto"
+                )
+                fig_heat.update_layout(height=500)
+                st.plotly_chart(fig_heat, use_container_width=True)
+        else:
+            st.info("Žiadne dáta pre vytvorenie heatmapy.")
+    
+    # TAB 6: Top členovia (pôvodná funkcionalita)
+    with tab6:
+        st.markdown("### 📅 Top členovia podľa mesiacov")
+        st.markdown("---")
+        
+        if monthly_stats:
+            # Zoradenie mesiacov od najnovšieho
+            sorted_months = sorted(monthly_stats.keys(), reverse=True)
+            
+            for month in sorted_months:
+                stats = monthly_stats[month]
+                if stats:
+                    # Formátovanie názvu mesiaca
+                    try:
+                        year, month_num = month.split('-')
+                        month_names = {
+                            '01': 'Január', '02': 'Február', '03': 'Marec',
+                            '04': 'Apríl', '05': 'Máj', '06': 'Jún',
+                            '07': 'Júl', '08': 'August', '09': 'September',
+                            '10': 'Október', '11': 'November', '12': 'December'
+                        }
+                        month_name = month_names.get(month_num, month_num)
+                        month_display = f"{month_name} {year}"
+                    except:
+                        month_display = month
+                    
+                    st.markdown(f"#### 📅 {month_display}")
+                    
+                    # Zobrazenie top 3
+                    cols = st.columns(3)
+                    for i, (name, count) in enumerate(stats.items()):
+                        with cols[i]:
+                            st.metric(
+                                label=f"{i+1}. miesto",
+                                value=name,
+                                delta=f"{count} tréningov"
+                            )
+                    
+                    st.markdown("---")
+        else:
+            st.info("Zatiaľ nie sú dostupné žiadne štatistiky.")
 
 
 def trainer_view(worksheet):
