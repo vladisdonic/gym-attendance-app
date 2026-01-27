@@ -63,7 +63,7 @@ MEMBERSHIP_TYPES = [
     "Ročné členstvo"
 ]
 
-# Časy tréningov
+# Časy tréningov - všetky (pre trénerský prehľad a štatistiky)
 TRAINING_TIMES = [
     "7:00",
     "9:00",
@@ -71,6 +71,20 @@ TRAINING_TIMES = [
     "17:00",
     "18:30"
 ]
+
+# Časy tréningov podľa dňa: víkend len 9:00, týždeň bez 9:00
+TRAINING_TIMES_WEEKDAY = ["7:00", "15:30", "17:00", "18:30"]  # Po–Pia
+TRAINING_TIMES_WEEKEND = ["9:00"]  # So–Ne
+
+
+def get_training_times_for_today():
+    """Vráti zoznam časov tréningov dostupných dnes. Cez víkend len 9:00, cez týždeň bez 9:00."""
+    now = get_local_time()
+    # Python: Monday=0, Sunday=6
+    if now.weekday() >= 5:  # Sobota(5) alebo Nedeľa(6)
+        return TRAINING_TIMES_WEEKEND
+    return TRAINING_TIMES_WEEKDAY
+
 
 # Heslo pre trénerskú časť
 TRAINER_PASSWORD = "supernova"
@@ -145,9 +159,48 @@ def get_or_create_sheet(client, spreadsheet_id):
         return None
 
 
-def add_attendance(worksheet, name, membership_type, training_time="", client_timestamp=None):
-    """Pridanie záznamu o účasti."""
+def is_already_registered(worksheet, name, training_time):
+    """
+    Skontroluje, či je člen už prihlásený na daný tréning v ten istý deň.
+    
+    Returns:
+        bool: True ak je už prihlásený, inak False
+    """
     try:
+        records = worksheet.get_all_records()
+        if not records:
+            return False
+        
+        # Názov stĺpca pre čas tréningu (môže byť "Čas tréningu" alebo "Tréning")
+        time_col = 'Čas tréningu' if 'Čas tréningu' in records[0] else ('Tréning' if 'Tréning' in records[0] else None)
+        name_col = 'Meno' if 'Meno' in records[0] else None
+        
+        if not time_col or not name_col:
+            return False
+        
+        for row in records:
+            if str(row.get(name_col, '')).strip() == str(name).strip() and str(row.get(time_col, '')).strip() == str(training_time).strip():
+                return True
+        
+        return False
+    except Exception:
+        return False
+
+
+def add_attendance(worksheet, name, membership_type, training_time="", client_timestamp=None):
+    """
+    Pridanie záznamu o účasti.
+    
+    Returns:
+        True: úspech
+        "duplicate": člen je už prihlásený na tento tréning
+        False: chyba pri ukladaní
+    """
+    try:
+        # Kontrola duplicity: ten istý člen sa nemôže prihlásiť 2x na rovnaký tréning
+        if is_already_registered(worksheet, name, training_time):
+            return "duplicate"
+        
         # Použiť čas klienta ak je k dispozícii, inak lokálny serverový čas (Europe/Bratislava)
         if client_timestamp:
             timestamp = client_timestamp
@@ -532,48 +585,45 @@ def create_attendance_heatmap(df):
 
 def get_next_training_time():
     """
-    Určí čas tréningu na základe aktuálneho času.
+    Určí čas tréningu na základe aktuálneho času a dňa v týždni.
     
-    Logika prihlásenia:
-    - 00:00 - 07:59 → prihlásenie na 7:00 (ranný tréning)
-    - 08:00 - 09:59 → prihlásenie na 9:00 (ranný tréning)
-    - 10:00 - 15:29 → prihlásenie na 15:30 (popoludňajší tréning)
-    - 15:30 - 16:59 → prihlásenie na 17:00 (popoludňajší tréning)
-    - 17:00 - 23:59 → prihlásenie na 18:30 (večerný tréning)
+    Cez víkend (So–Ne): iba tréning o 9:00.
+    Cez týždeň (Po–Pia): 7:00, 15:30, 17:00, 18:30 (bez 9:00).
     
-    Vysvetlenie:
-    - Na tréning o 7:00 sa dá prihlásiť kedykoľvek pred ním alebo do 8:00
-    - Na tréning o 9:00 sa dá prihlásiť od 8:00 do 10:00
-    - Po 10:00 sa automaticky prihlasujem na 15:30
-    - Po 15:30 sa automaticky prihlasujem na 17:00
-    - Po 17:00 sa automaticky prihlasujem na 18:30 (platí do konca dňa)
-    - Po polnoci sa prihlasujem na ranný tréning o 7:00
+    Logika cez týždeň:
+    - 00:00 - 07:59 → 7:00 (ranný)
+    - 08:00 - 16:29 → 15:30 (popoludňajší)
+    - 16:30 - 17:59 → 17:00 (popoludňajší)
+    - 18:00 - 23:59 → 18:30 (večerný)
+    
+    Logika cez víkend:
+    - celý deň → 9:00
     
     Returns:
-        str: Čas tréningu ("7:00", "9:00", "15:30", "17:00", alebo "18:30")
+        str: Čas tréningu
     """
-    # Použiť lokálny čas (Europe/Bratislava)
     now = get_local_time()
     current_hour = now.hour
     current_minute = now.minute
     
+    # Cez víkend (Sobota=5, Nedeľa=6) – iba 9:00
+    if now.weekday() >= 5:
+        return "9:00"
+    
+    # Cez týždeň – bez 9:00
     # 00:00 - 07:59 → 7:00 (ranný tréning)
     if current_hour < 8:
         return "7:00"
     
-    # 08:00 - 09:59 → 9:00 (ranný tréning)
-    if current_hour < 10:
-        return "9:00"
-    
-    # 10:00 - 15:29 → 15:30 (popoludňajší tréning)
-    if current_hour < 15 or (current_hour == 15 and current_minute < 30):
+    # 08:00 - 16:29 → 15:30 (popoludňajší tréning)
+    if current_hour < 16 or (current_hour == 16 and current_minute < 30):
         return "15:30"
     
-    # 15:30 - 16:59 → 17:00 (popoludňajší tréning)
-    if current_hour < 17:
+    # 16:30 - 17:59 → 17:00 (popoludňajší tréning)
+    if current_hour < 18:
         return "17:00"
     
-    # 17:00 - 23:59 → 18:30 (večerný tréning)
+    # 18:00 - 23:59 → 18:30 (večerný tréning)
     return "18:30"
     
 
@@ -730,8 +780,15 @@ def participant_view(worksheet, query_params=None):
     url_time = unquote(query_params.get("time", ""))
     auto_submit = query_params.get("auto", "0") == "1"
     
+    # Časy tréningov dostupné dnes (víkend len 9:00, týždeň bez 9:00)
+    training_times_today = get_training_times_for_today()
+    
     # Ak čas nie je v URL, automaticky vyberieme najbližší
     if not url_time:
+        url_time = get_next_training_time()
+    
+    # Ak URL čas nie je dostupný dnes (napr. 9:00 cez týždeň), použiť najbližší
+    if url_time not in training_times_today:
         url_time = get_next_training_time()
     
     # Určenie predvolených hodnôt z URL parametrov
@@ -753,18 +810,23 @@ def participant_view(worksheet, query_params=None):
                     default_membership_index = i
                     break
     
-    # Nájdenie indexu pre čas tréningu
-    default_time_index = 0  # Predvolená: 9:00
-    if url_time:
-        url_time_clean = url_time.strip()
-        for i, time in enumerate(TRAINING_TIMES):
-            if time == url_time_clean:
+    # Nájdenie indexu pre čas tréningu (v rámci dnešných časov)
+    default_time_index = 0
+    if url_time and url_time in training_times_today:
+        for i, t in enumerate(training_times_today):
+            if t == url_time.strip():
+                default_time_index = i
+                break
+    else:
+        next_time = get_next_training_time()
+        for i, t in enumerate(training_times_today):
+            if t == next_time:
                 default_time_index = i
                 break
     
     # Automatické odoslanie ak sú všetky údaje v URL a auto=1
     auto_submit_ready = (auto_submit and url_name and url_membership and url_time and 
-                        url_membership in MEMBERSHIP_TYPES and url_time in TRAINING_TIMES)
+                        url_membership in MEMBERSHIP_TYPES and url_time in training_times_today)
     
     # Sekcia na generovanie osobnej klubovej karty
     with st.expander("🎴 Vygenerovať klubovú kartu", expanded=False):
@@ -826,7 +888,7 @@ def participant_view(worksheet, query_params=None):
         
         training_time = st.selectbox(
             "Čas tréningu *",
-            options=TRAINING_TIMES,
+            options=training_times_today,
             index=default_time_index,
             key="time_select"
         )
@@ -925,7 +987,8 @@ def participant_view(worksheet, query_params=None):
                 # Získať čas klienta z JavaScriptu (ak je k dispozícii)
                 client_timestamp = client_time if client_time else None
                 # Automatické odoslanie
-                if add_attendance(worksheet, final_name, final_membership, final_time, client_timestamp):
+                result = add_attendance(worksheet, final_name, final_membership, final_time, client_timestamp)
+                if result is True:
                     st.success("🎉 Úspešne prihlásený/á!")
                     st.balloons()
                     
@@ -937,6 +1000,9 @@ def participant_view(worksheet, query_params=None):
                     }, 2000);
                     </script>
                     """, unsafe_allow_html=True)
+                    return
+                elif result == "duplicate":
+                    st.warning("⚠️ Už si prihlásený/á na tento tréning. Nemôžeš sa prihlásiť dvakrát.")
                     return
         
         if submitted:
@@ -952,7 +1018,8 @@ def participant_view(worksheet, query_params=None):
             else:
                 # Získať čas klienta z JavaScriptu (ak je k dispozícii)
                 client_timestamp = client_time if client_time else None
-                if add_attendance(worksheet, name.strip(), membership, training_time, client_timestamp):
+                result = add_attendance(worksheet, name.strip(), membership, training_time, client_timestamp)
+                if result is True:
                     st.success("🎉 Úspešne prihlásený/á!")
                     st.balloons()
                     
@@ -965,6 +1032,8 @@ def participant_view(worksheet, query_params=None):
                         }, 2000);
                         </script>
                         """, unsafe_allow_html=True)
+                elif result == "duplicate":
+                    st.warning("⚠️ Už si prihlásený/á na tento tréning. Nemôžeš sa prihlásiť dvakrát.")
 
 
 def generate_wallet_pass(name, membership, time, auto=True):
@@ -1106,10 +1175,13 @@ def wallet_pass_view():
                 index=1  # Predvolená: Mesačné členstvo
             )
             
+            wallet_times_today = get_training_times_for_today()
+            wallet_next_t = get_next_training_time()
+            wallet_time_index = wallet_times_today.index(wallet_next_t) if wallet_next_t in wallet_times_today else 0
             time = st.selectbox(
                 "Čas tréningu *",
-                options=TRAINING_TIMES,
-                index=0
+                options=wallet_times_today,
+                index=wallet_time_index
             )
             
             auto = st.checkbox("Automatické odoslanie pri otvorení", value=True)
@@ -1252,10 +1324,13 @@ def wallet_pass_view():
                 key="qr_membership"
             )
             
+            qr_times_today = get_training_times_for_today()
+            qr_next_t = get_next_training_time()
+            qr_time_index = qr_times_today.index(qr_next_t) if qr_next_t in qr_times_today else 0
             qr_time = st.selectbox(
                 "Čas tréningu *",
-                options=TRAINING_TIMES,
-                index=0,
+                options=qr_times_today,
+                index=qr_time_index,
                 key="qr_time"
             )
             
@@ -1911,6 +1986,11 @@ def scanner_view(worksheet):
     if 'last_scan_time' not in st.session_state:
         st.session_state.last_scan_time = 0
     
+    # Zobraziť upozornenie na duplicitu (ak sa člen pokúsil prihlásiť 2x)
+    if st.session_state.get('scan_duplicate_message'):
+        st.warning(f"⚠️ {st.session_state.scan_duplicate_message}")
+        del st.session_state.scan_duplicate_message
+    
     # Zobraziť posledné úspešné prihlásenie (ak bolo v posledných 5 sekundách)
     import time
     current_time = time.time()
@@ -1934,15 +2014,20 @@ def scanner_view(worksheet):
     
     # Ak máme údaje z QR kódu - spracovať a uložiť
     if qr_name and qr_membership:
+        training_times_today = get_training_times_for_today()
         if not qr_time:
             qr_time = get_next_training_time()
+        # Ak čas z QR nie je dostupný dnes (napr. 9:00 cez týždeň), použiť najbližší
+        if qr_time not in training_times_today:
+            qr_time = get_next_training_time()
         
-        # Validácia
-        is_valid = qr_membership in MEMBERSHIP_TYPES and qr_time in TRAINING_TIMES
+        # Validácia (iba dnešné časy)
+        is_valid = qr_membership in MEMBERSHIP_TYPES and qr_time in training_times_today
         
         if is_valid:
-            # Uložiť dochádzku
-            if add_attendance(worksheet, qr_name, qr_membership, qr_time):
+            # Uložiť dochádzku (kontrola duplicity je v add_attendance)
+            result = add_attendance(worksheet, qr_name, qr_membership, qr_time)
+            if result is True:
                 # Uložiť do session state pre zobrazenie
                 st.session_state.last_scan_success = {
                     'name': qr_name,
@@ -1951,6 +2036,8 @@ def scanner_view(worksheet):
                 }
                 st.session_state.last_scan_time = time.time()
                 st.balloons()
+            elif result == "duplicate":
+                st.session_state.scan_duplicate_message = f"{qr_name} je už prihlásený/á na tréning o {qr_time}."
         
         # Vyčistiť query params a reloadnúť
         st.query_params.clear()
@@ -2161,23 +2248,28 @@ def scanner_view(worksheet):
                     const name = params.get('name') || '';
                     const membership = params.get('membership') || '';
                 
-                // Automatický výber času ak nie je v QR kóde
-                // 00:00-07:59 → 7:00, 08:00-09:59 → 9:00, 10:00-15:29 → 15:30, 15:30-16:59 → 17:00, 17:00-23:59 → 18:30
+                // Automatický výber času ak nie je v QR kóde, alebo ak čas z QR nie je platný dnes
+                // Cez víkend (So–Ne) iba 9:00; cez týždeň 7:00, 15:30, 17:00, 18:30 (bez 9:00)
                 let time = params.get('time');
-                if (!time) {
-                    const now = new Date();
-                    const currentHour = now.getHours();
-                    const currentMinute = now.getMinutes();
-                    if (currentHour < 8) {
-                        time = '7:00';
-                    } else if (currentHour < 10) {
+                const now = new Date();
+                const day = now.getDay();  // 0=Nedeľa, 6=Sobota
+                const isWeekend = (day === 0 || day === 6);
+                const currentHour = now.getHours();
+                const currentMinute = now.getMinutes();
+                
+                if (!time || (isWeekend && time !== '9:00') || (!isWeekend && time === '9:00')) {
+                    if (isWeekend) {
                         time = '9:00';
-                    } else if (currentHour < 15 || (currentHour === 15 && currentMinute < 30)) {
-                        time = '15:30';
-                    } else if (currentHour < 17) {
-                        time = '17:00';
                     } else {
-                        time = '18:30';
+                        if (currentHour < 8) {
+                            time = '7:00';
+                        } else if (currentHour < 16 || (currentHour === 16 && currentMinute < 30)) {
+                            time = '15:30';
+                        } else if (currentHour < 18) {
+                            time = '17:00';
+                        } else {
+                            time = '18:30';
+                        }
                     }
                 }
                 
@@ -2370,15 +2462,21 @@ def scanner_view(worksheet):
     with st.form("manual_attendance_form"):
         manual_name = st.text_input("Meno a priezvisko", placeholder="Zadaj meno člena...")
         manual_membership = st.selectbox("Typ členstva", options=MEMBERSHIP_TYPES, index=1)
-        manual_time = st.selectbox("Čas tréningu", options=TRAINING_TIMES, index=TRAINING_TIMES.index(get_next_training_time()) if get_next_training_time() in TRAINING_TIMES else 0)
+        manual_times_today = get_training_times_for_today()
+        next_t = get_next_training_time()
+        manual_time_index = manual_times_today.index(next_t) if next_t in manual_times_today else 0
+        manual_time = st.selectbox("Čas tréningu", options=manual_times_today, index=manual_time_index)
         
         submitted = st.form_submit_button("✅ Prihlásiť", type="primary", use_container_width=True)
         
         if submitted:
             if manual_name.strip():
-                if add_attendance(worksheet, manual_name.strip(), manual_membership, manual_time):
+                result = add_attendance(worksheet, manual_name.strip(), manual_membership, manual_time)
+                if result is True:
                     st.success(f"✅ {manual_name} bol úspešne prihlásený!")
                     st.balloons()
+                elif result == "duplicate":
+                    st.warning(f"⚠️ {manual_name} je už prihlásený/á na tréning o {manual_time}. Nemôže sa prihlásiť dvakrát.")
                 else:
                     st.error("❌ Chyba pri prihlasovaní.")
             else:
@@ -2430,17 +2528,26 @@ def docs_view():
     
     ---
     
-    ### ⏰ Logika automatického výberu času tréningu
+    ### ⏰ Logika výberu času tréningu podľa dňa
     
-    Aplikácia automaticky vyberá čas tréningu podľa aktuálneho času:
+    **Cez víkend (Sobota, Nedeľa):** iba tréning o **9:00**.
     
-    | Aktuálny čas | Vybraný tréning |
-    |--------------|-----------------|
+    **Cez týždeň (Pondelok–Piatok):** tréningy o 7:00, 15:30, 17:00, 18:30 (bez 9:00).
+    
+    | Aktuálny čas (Po–Pia) | Vybraný tréning |
+    |----------------------|-----------------|
     | 00:00 - 07:59 | **7:00** (ranný) |
-    | 08:00 - 09:59 | **9:00** (ranný) |
-    | 10:00 - 15:29 | **15:30** (popoludňajší) |
-    | 15:30 - 16:59 | **17:00** (popoludňajší) |
-    | 17:00 - 23:59 | **18:30** (večerný) |
+    | 08:00 - 16:29 | **15:30** (popoludňajší) |
+    | 16:30 - 17:59 | **17:00** (popoludňajší) |
+    | 18:00 - 23:59 | **18:30** (večerný) |
+    
+    Cez víkend sa vždy vyberie **9:00** bez ohľadu na hodinu.
+    
+    ---
+    
+    ### 🚫 Prevencia duplicít
+    
+    Ten istý člen sa **nemôže prihlásiť 2x na rovnaký tréning** v ten istý deň. Ak sa člen pokúsi prihlásiť znova na ten istý čas, aplikácia zobrazí upozornenie a prihlásenie sa neuloží.
     
     ---
     
