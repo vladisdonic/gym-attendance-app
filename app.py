@@ -271,6 +271,107 @@ def get_all_worksheets(client, spreadsheet_id):
         return []
 
 
+# Názov typu členstva pre mesačné (pre admin členstva)
+MEMBERSHIP_MONTHLY_LABEL = "Mesačné členstvo"
+
+
+def get_monthly_members_with_monthly_membership(client, spreadsheet_id, year_month):
+    """
+    Získa zoznam mien členov s mesačným členstvom, ktorí v danom mesiaci boli aspoň raz na tréningu.
+    year_month: reťazec "YYYY-MM", napr. "2025-01"
+    Vráti: zoznam mien zoradených podľa abecedy.
+    """
+    try:
+        df = get_all_attendance_data(client, spreadsheet_id, use_cache=False)
+        if df.empty:
+            return []
+        # Hárky majú názov YYYY-MM-DD
+        df = df[df['Dátum'].astype(str).str.startswith(str(year_month))]
+        if df.empty:
+            return []
+        # Iba Mesačné členstvo
+        col_membership = 'Typ členstva' if 'Typ členstva' in df.columns else None
+        if not col_membership:
+            return []
+        df = df[df[col_membership] == MEMBERSHIP_MONTHLY_LABEL]
+        if df.empty:
+            return []
+        names = df['Meno'].dropna().unique().tolist()
+        names = [str(n).strip() for n in names if str(n).strip()]
+        return sorted(names)
+    except Exception as e:
+        st.error(f"Chyba pri načítaní členov: {e}")
+        return []
+
+
+def get_or_create_membership_sheet(client, spreadsheet_id, year_month):
+    """Získanie alebo vytvorenie hárku pre evidencia členstva za mesiac. Názov: Členstvo_YYYY-MM."""
+    try:
+        spreadsheet = client.open_by_key(spreadsheet_id)
+        sheet_name = f"Členstvo_{year_month}"
+        try:
+            worksheet = spreadsheet.worksheet(sheet_name)
+        except gspread.WorksheetNotFound:
+            worksheet = spreadsheet.add_worksheet(
+                title=sheet_name,
+                rows=500,
+                cols=3
+            )
+            worksheet.update('A1:C1', [['Meno', 'Status', 'Poznámka']])
+            worksheet.format('A1:C1', {
+                'textFormat': {'bold': True},
+                'backgroundColor': {'red': 0.9, 'green': 0.9, 'blue': 0.9}
+            })
+        return worksheet
+    except Exception as e:
+        st.error(f"Chyba pri prístupe k hárku členstva: {e}")
+        return None
+
+
+def get_membership_statuses(worksheet):
+    """Načíta z hárku slovník Meno -> Status (Uhradené / Neuhradené)."""
+    try:
+        records = worksheet.get_all_records()
+        if not records:
+            return {}
+        result = {}
+        for row in records:
+            name = row.get('Meno', '').strip()
+            if name:
+                result[name] = row.get('Status', 'Neuhradené').strip() or 'Neuhradené'
+        return result
+    except Exception as e:
+        return {}
+
+
+def update_membership_sheet(worksheet, member_status_list):
+    """
+    Zapíše do hárku zoznam členov so statusmi.
+    member_status_list: zoznam dvojíc (meno, status), status je "Uhradené" alebo "Neuhradené"
+    """
+    try:
+        if not member_status_list:
+            worksheet.clear()
+            worksheet.update('A1:C1', [['Meno', 'Status', 'Poznámka']])
+            worksheet.format('A1:C1', {
+                'textFormat': {'bold': True},
+                'backgroundColor': {'red': 0.9, 'green': 0.9, 'blue': 0.9}
+            })
+            return True
+        rows = [[name, status, ""] for name, status in member_status_list]
+        # Hlavička + dáta
+        worksheet.update('A1:C1', [['Meno', 'Status', 'Poznámka']])
+        worksheet.update(f'A2:C{1 + len(rows)}', rows)
+        worksheet.format('A1:C1', {
+            'textFormat': {'bold': True},
+            'backgroundColor': {'red': 0.9, 'green': 0.9, 'blue': 0.9}
+        })
+        return True
+    except Exception as e:
+        st.error(f"Chyba pri ukladaní: {e}")
+        return False
+
+
 def get_all_attendance_data(client, spreadsheet_id, use_cache=True, cache_ttl=300):
     """
     Získanie všetkých dát o účasti zo všetkých hárkov.
@@ -2483,6 +2584,102 @@ def scanner_view(worksheet):
                 st.warning("⚠️ Prosím, zadaj meno.")
 
 
+def membership_admin_view(client, spreadsheet_id):
+    """
+    Samostatný view: zoznam členov s mesačným členstvom, ktorí v danom mesiaci boli aspoň raz na tréningu.
+    Zoradené podľa abecedy, pri každom prepínateľný status Uhradené / Neuhradené.
+    Dáta sa ukladajú do Google Sheet pre každý mesiac zvlášť (hárok Členstvo_YYYY-MM).
+    Chránené heslom (trénerské).
+    """
+    if not check_trainer_auth():
+        trainer_login()
+        return
+
+    st.title("📋 Mesačné členstvo – admin")
+    st.markdown("Zoznam členov s mesačným členstvom, ktorí v zvolenom mesiaci boli aspoň raz na tréningu. Status uhradenia párujte manuálne.")
+    st.markdown("---")
+
+    col1, col2 = st.columns([3, 1])
+    with col1:
+        if st.button("🔄 Obnoviť", use_container_width=True):
+            st.rerun()
+    with col2:
+        if st.button("🚪 Odhlásiť sa", use_container_width=True):
+            st.session_state.trainer_authenticated = False
+            st.rerun()
+
+    # Načítanie dát pre výber mesiacov a zoznam členov
+    df_all = get_all_attendance_data(client, spreadsheet_id, use_cache=False)
+    if df_all.empty:
+        st.info("Zatiaľ nie sú žiadne dáta o dochádzke.")
+        return
+
+    df_all['Dátum_parsed'] = pd.to_datetime(df_all['Dátum'], errors='coerce', format='%Y-%m-%d')
+    df_all = df_all.dropna(subset=['Dátum_parsed'])
+    df_all['Mesiac_str'] = df_all['Dátum_parsed'].dt.to_period('M').astype(str)
+    available_months = sorted(df_all['Mesiac_str'].unique(), reverse=True)
+
+    if not available_months:
+        st.info("Zatiaľ nie sú žiadne mesiace s dochádzkou.")
+        return
+
+    selected_month = st.selectbox(
+        "Vyber mesiac",
+        options=available_months,
+        index=0,
+        key="membership_admin_month"
+    )
+
+    members = get_monthly_members_with_monthly_membership(client, spreadsheet_id, selected_month)
+    if not members:
+        st.info(f"V mesiaci {selected_month} nebol nikto s mesačným členstvom aspoň raz na tréningu.")
+        return
+
+    membership_sheet = get_or_create_membership_sheet(client, spreadsheet_id, selected_month)
+    if not membership_sheet:
+        return
+
+    existing_statuses = get_membership_statuses(membership_sheet)
+
+    st.markdown(f"### Mesiac **{selected_month}** – {len(members)} členov")
+    st.markdown("---")
+
+    # Session state pre aktuálne statusy (aby sa nez resetovali pri rerun)
+    state_key = f"membership_status_{selected_month}"
+    if state_key not in st.session_state:
+        st.session_state[state_key] = {
+            name: existing_statuses.get(name, "Neuhradené") for name in members
+        }
+
+    # Pri načítaní existujúcich z sheetu môžeme synchronizovať state
+    for name in members:
+        if name in existing_statuses and st.session_state[state_key].get(name) != existing_statuses[name]:
+            st.session_state[state_key][name] = existing_statuses[name]
+
+    member_status_list = []
+    for i, name in enumerate(members):
+        current = st.session_state[state_key].get(name, "Neuhradené")
+        new_status = st.radio(
+            f"**{name}**",
+            options=["Neuhradené", "Uhradené"],
+            index=1 if current == "Uhradené" else 0,
+            key=f"membership_status_{selected_month}_{i}_{name}",
+            horizontal=True
+        )
+        st.session_state[state_key][name] = new_status
+        member_status_list.append((name, new_status))
+
+    st.markdown("---")
+    if st.button("💾 Uložiť zmeny do Google Sheet", type="primary", use_container_width=True):
+        if update_membership_sheet(membership_sheet, member_status_list):
+            st.success("Zmeny boli uložené do hárka Členstvo_" + selected_month + ".")
+            st.rerun()
+        else:
+            st.error("Uloženie zlyhalo.")
+
+    st.caption("Hárok v Google Sheet: **Členstvo_" + selected_month + "** (stĺpce: Meno, Status, Poznámka)")
+
+
 def docs_view():
     """Pohľad pre dokumentáciu aplikácie - chránená heslom."""
     st.title("📚 Dokumentácia")
@@ -2888,6 +3085,10 @@ def main():
             st.query_params["view"] = "docs"
             st.rerun()
         
+        if st.button("📋 Mesačné členstvo", use_container_width=True):
+            st.query_params["view"] = "membership_admin"
+            st.rerun()
+        
         st.markdown("---")
         # Zobrazenie lokálneho dátumu
         today = get_local_time().date()
@@ -2904,6 +3105,8 @@ def main():
         scanner_view(worksheet)
     elif view == "docs":
         docs_view()
+    elif view == "membership_admin":
+        membership_admin_view(client, spreadsheet_id)
     else:
         participant_view(worksheet, query_params)
 
