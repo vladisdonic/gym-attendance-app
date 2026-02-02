@@ -1861,7 +1861,9 @@ def trainer_view(worksheet):
                         for idx, row in time_df.iterrows():
                             col1, col2 = st.columns([4, 1])
                             with col1:
-                                st.markdown(f"**{row['Meno']}** - {row['Typ členstva']} ({row['Čas']})")
+                                note_text = row.get('Poznámka', '') or ''
+                                note_part = f" — _{note_text}_" if note_text else ""
+                                st.markdown(f"**{row['Meno']}** - {row['Typ členstva']} ({row['Čas']}){note_part}")
                             with col2:
                                 delete_key = f"delete_{training_time}_{idx}_{row['Čas']}"
                                 if st.button("🗑️ Vymazať", key=delete_key, use_container_width=True):
@@ -1897,7 +1899,9 @@ def trainer_view(worksheet):
             col1, col2 = st.columns([4, 1])
             with col1:
                 time_info = f" - {row[time_column]}" if time_column in row else ""
-                st.markdown(f"**{row['Meno']}** - {row['Typ členstva']}{time_info} ({row['Čas']})")
+                note_text = row.get('Poznámka', '') or ''
+                note_part = f" — _{note_text}_" if note_text else ""
+                st.markdown(f"**{row['Meno']}** - {row['Typ členstva']}{time_info} ({row['Čas']}){note_part}")
             with col2:
                 delete_key = f"delete_all_{idx}_{row['Čas']}"
                 if st.button("🗑️ Vymazať", key=delete_key, use_container_width=True):
@@ -2402,7 +2406,7 @@ def scanner_view(worksheet):
         next_t = get_next_training_time()
         manual_time_index = manual_times_today.index(next_t) if next_t in manual_times_today else 0
         manual_time = st.selectbox("Čas tréningu", options=manual_times_today, index=manual_time_index)
-        manual_note = st.text_input("Poznámka", placeholder="Voliteľná poznámka (zobrazí sa v Google Sheet)...")
+        manual_note = st.text_input("Poznámka", placeholder="Voliteľná poznámka")
         
         submitted = st.form_submit_button("✅ Prihlásiť", type="primary", use_container_width=True)
         
