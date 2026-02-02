@@ -146,7 +146,8 @@ def get_or_create_sheet(client, spreadsheet_id):
             worksheet = spreadsheet.add_worksheet(
                 title=today_str,
                 rows=1000,
-                cols=5
+                cols=5,
+                index=0
             )
             worksheet.update('A1:E1', [['Čas', 'Meno', 'Typ členstva', 'Čas tréningu', 'Poznámka']])
             worksheet.format('A1:E1', {
