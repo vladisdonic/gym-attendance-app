@@ -875,6 +875,12 @@ def participant_view(worksheet, query_params=None):
             key="time_select"
         )
         
+        note = st.text_input(
+            "Poznámka",
+            placeholder="Voliteľná poznámka (zobrazí sa v Google Sheet)...",
+            key="note_input"
+        )
+        
         # Honeypot pole - skryté pre užívateľov, viditeľné pre botov
         # CSS na úplné skrytie poľa
         st.markdown("""
@@ -968,8 +974,8 @@ def participant_view(worksheet, query_params=None):
             if not honeypot or not honeypot.strip():
                 # Získať čas klienta z JavaScriptu (ak je k dispozícii)
                 client_timestamp = client_time if client_time else None
-                # Automatické odoslanie
-                result = add_attendance(worksheet, final_name, final_membership, final_time, client_timestamp)
+                # Automatické odoslanie (bez poznámky z URL)
+                result = add_attendance(worksheet, final_name, final_membership, final_time, client_timestamp, note="")
                 if result is True:
                     st.success("🎉 Úspešne prihlásený/á!")
                     st.balloons()
@@ -1000,7 +1006,7 @@ def participant_view(worksheet, query_params=None):
             else:
                 # Získať čas klienta z JavaScriptu (ak je k dispozícii)
                 client_timestamp = client_time if client_time else None
-                result = add_attendance(worksheet, name.strip(), membership, training_time, client_timestamp)
+                result = add_attendance(worksheet, name.strip(), membership, training_time, client_timestamp, note=(note or "").strip())
                 if result is True:
                     st.success("🎉 Úspešne prihlásený/á!")
                     st.balloons()
