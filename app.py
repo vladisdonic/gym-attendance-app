@@ -9,6 +9,7 @@ import streamlit as st
 import gspread
 from google.oauth2.service_account import Credentials
 from datetime import datetime, date, timedelta
+import time
 import pandas as pd
 import json
 from urllib.parse import unquote, quote
@@ -129,85 +130,72 @@ def get_google_sheets_client():
 
 
 def get_or_create_sheet(client, spreadsheet_id):
-    """Získanie alebo vytvorenie hárku pre dnešný deň."""
+    """Získanie alebo vytvorenie hárku pre dnešný deň (YYYY-MM-DD)."""
+    today = get_local_time().date()
+    today_str = today.strftime("%Y-%m-%d")
+    cache_key = f"cached_today_worksheet_{spreadsheet_id}_{today_str}"
+
+    if cache_key in st.session_state:
+        return st.session_state[cache_key]
+
     try:
         spreadsheet = client.open_by_key(spreadsheet_id)
-        # Použiť lokálny dátum (Europe/Bratislava)
-        today = get_local_time().date()
-        today_str = today.strftime("%Y-%m-%d")
-        
-        # Skúsime nájsť hárok pre dnešný deň
         try:
             worksheet = spreadsheet.worksheet(today_str)
         except gspread.WorksheetNotFound:
-            # Vytvoríme nový hárok
             worksheet = spreadsheet.add_worksheet(
                 title=today_str,
                 rows=1000,
                 cols=5
             )
-            # Pridáme hlavičku
             worksheet.update('A1:E1', [['Čas', 'Meno', 'Typ členstva', 'Čas tréningu', 'Poznámka']])
             worksheet.format('A1:E1', {
                 'textFormat': {'bold': True},
                 'backgroundColor': {'red': 0.9, 'green': 0.9, 'blue': 0.9}
             })
-        
+        st.session_state[cache_key] = worksheet
         return worksheet
     except Exception as e:
-        st.error(f"Chyba pri prístupe k spreadsheet: {e}")
+        error_msg = str(e)
+        if '429' in error_msg or 'Quota exceeded' in error_msg or 'quota' in error_msg.lower():
+            if cache_key in st.session_state:
+                st.warning("⚠️ API limit prekročený – zobrazujem posledný načítaný hárok.")
+                return st.session_state[cache_key]
+            st.warning("⚠️ **API limit prekročený** – počkaj 1–2 minúty a obnov stránku.")
+        else:
+            st.error(f"Chyba pri prístupe k spreadsheet: {e}")
         return None
 
 
 def is_already_registered(worksheet, name, training_time):
-    """
-    Skontroluje, či je člen už prihlásený na daný tréning v ten istý deň.
-    
-    Returns:
-        bool: True ak je už prihlásený, inak False
-    """
+    """Skontroluje, či je člen už prihlásený na daný tréning v ten istý deň."""
     try:
         records = worksheet.get_all_records()
         if not records:
             return False
-        
-        # Názov stĺpca pre čas tréningu (môže byť "Čas tréningu" alebo "Tréning")
         time_col = 'Čas tréningu' if 'Čas tréningu' in records[0] else ('Tréning' if 'Tréning' in records[0] else None)
         name_col = 'Meno' if 'Meno' in records[0] else None
-        
         if not time_col or not name_col:
             return False
-        
         for row in records:
             if str(row.get(name_col, '')).strip() == str(name).strip() and str(row.get(time_col, '')).strip() == str(training_time).strip():
                 return True
-        
         return False
     except Exception:
         return False
 
 
-def add_attendance(worksheet, name, membership_type, training_time="", client_timestamp=None):
-    """
-    Pridanie záznamu o účasti.
-    
-    Returns:
-        True: úspech
-        "duplicate": člen je už prihlásený na tento tréning
-        False: chyba pri ukladaní
-    """
+def add_attendance(worksheet, name, membership_type, training_time="", client_timestamp=None, note=""):
+    """Pridanie záznamu o účasti. Poznámka sa zapíše do stĺpca Poznámka v Google Sheet."""
     try:
-        # Kontrola duplicity: ten istý člen sa nemôže prihlásiť 2x na rovnaký tréning
         if is_already_registered(worksheet, name, training_time):
             return "duplicate"
-        
-        # Použiť čas klienta ak je k dispozícii, inak lokálny serverový čas (Europe/Bratislava)
         if client_timestamp:
             timestamp = client_timestamp
         else:
-            local_time = get_local_time()
-            timestamp = local_time.strftime("%H:%M:%S")
-        row = [timestamp, name, membership_type, training_time, ""]
+            timestamp = get_local_time().strftime("%H:%M:%S")
+        note_str = (note or "").strip()
+        row = [timestamp, name, membership_type, training_time, note_str]
         worksheet.append_row(row)
         return True
     except Exception as e:
@@ -228,151 +216,47 @@ def get_today_attendance(worksheet):
 def delete_attendance(worksheet, name, timestamp, membership_type, training_time=""):
     """Vymazanie záznamu o účasti z Google Sheet."""
     try:
-        # Načítanie všetkých dát
         all_values = worksheet.get_all_values()
-        
-        # Hlavička je na riadku 1 (index 0), dáta začínajú od riadku 2 (index 1)
-        # Hľadáme riadok, ktorý zodpovedá všetkým parametrom
-        row_to_delete = None
-        
-        for i, row in enumerate(all_values[1:], start=2):  # Začíname od riadku 2 (index 1 v liste, ale riadok 2 v Sheet)
+        for i, row in enumerate(all_values[1:], start=2):
             if len(row) >= 4:
                 row_timestamp = row[0] if len(row) > 0 else ""
                 row_name = row[1] if len(row) > 1 else ""
                 row_membership = row[2] if len(row) > 2 else ""
                 row_time = row[3] if len(row) > 3 else ""
-                
-                # Porovnanie - tolerancia na malé rozdiely v čase (môže byť sekunda rozdiel)
-                if (row_name == name and 
-                    row_membership == membership_type and 
-                    row_time == training_time and
-                    row_timestamp.startswith(timestamp[:5])):  # Porovnávame len hodiny:minúty
-                    row_to_delete = i
-                    break
-        
-        if row_to_delete:
-            worksheet.delete_rows(row_to_delete)
-            return True
-        else:
-            return False
+                if (row_name == name and row_membership == membership_type and
+                        row_time == training_time and row_timestamp.startswith(timestamp[:5])):
+                    worksheet.delete_rows(i)
+                    return True
+        return False
     except Exception as e:
         st.error(f"Chyba pri vymazávaní: {e}")
         return False
 
 
-def get_all_worksheets(client, spreadsheet_id):
-    """Získanie všetkých hárkov zo spreadsheetu."""
+def get_all_worksheets(client, spreadsheet_id, use_cache=True, cache_ttl=120):
+    """Získanie všetkých hárkov zo spreadsheetu. Cache 120 s (obmedzenie API quota)."""
+    cache_key = f"worksheets_list_{spreadsheet_id}"
+    cache_time_key = f"worksheets_list_time_{spreadsheet_id}"
+    if use_cache and cache_key in st.session_state and cache_time_key in st.session_state:
+        if time.time() - st.session_state[cache_time_key] < cache_ttl:
+            return st.session_state[cache_key]
     try:
         spreadsheet = client.open_by_key(spreadsheet_id)
         worksheets = spreadsheet.worksheets()
+        if use_cache:
+            st.session_state[cache_key] = worksheets
+            st.session_state[cache_time_key] = time.time()
         return worksheets
     except Exception as e:
+        error_msg = str(e)
+        if ('429' in error_msg or 'Quota exceeded' in error_msg) and cache_key in st.session_state:
+            st.warning("⚠️ API limit – používam zoznam hárkov z cache.")
+            return st.session_state[cache_key]
         st.error(f"Chyba pri načítaní hárkov: {e}")
         return []
 
 
-# Názov typu členstva pre mesačné (pre admin členstva)
-MEMBERSHIP_MONTHLY_LABEL = "Mesačné členstvo"
-
-
-def get_monthly_members_with_monthly_membership(client, spreadsheet_id, year_month):
-    """
-    Získa zoznam mien členov s mesačným členstvom, ktorí v danom mesiaci boli aspoň raz na tréningu.
-    year_month: reťazec "YYYY-MM", napr. "2025-01"
-    Vráti: zoznam mien zoradených podľa abecedy.
-    """
-    try:
-        df = get_all_attendance_data(client, spreadsheet_id, use_cache=False)
-        if df.empty:
-            return []
-        # Hárky majú názov YYYY-MM-DD
-        df = df[df['Dátum'].astype(str).str.startswith(str(year_month))]
-        if df.empty:
-            return []
-        # Iba Mesačné členstvo
-        col_membership = 'Typ členstva' if 'Typ členstva' in df.columns else None
-        if not col_membership:
-            return []
-        df = df[df[col_membership] == MEMBERSHIP_MONTHLY_LABEL]
-        if df.empty:
-            return []
-        names = df['Meno'].dropna().unique().tolist()
-        names = [str(n).strip() for n in names if str(n).strip()]
-        return sorted(names)
-    except Exception as e:
-        st.error(f"Chyba pri načítaní členov: {e}")
-        return []
-
-
-def get_or_create_membership_sheet(client, spreadsheet_id, year_month):
-    """Získanie alebo vytvorenie hárku pre evidencia členstva za mesiac. Názov: Členstvo_YYYY-MM."""
-    try:
-        spreadsheet = client.open_by_key(spreadsheet_id)
-        sheet_name = f"Členstvo_{year_month}"
-        try:
-            worksheet = spreadsheet.worksheet(sheet_name)
-        except gspread.WorksheetNotFound:
-            worksheet = spreadsheet.add_worksheet(
-                title=sheet_name,
-                rows=500,
-                cols=3
-            )
-            worksheet.update('A1:C1', [['Meno', 'Status', 'Poznámka']])
-            worksheet.format('A1:C1', {
-                'textFormat': {'bold': True},
-                'backgroundColor': {'red': 0.9, 'green': 0.9, 'blue': 0.9}
-            })
-        return worksheet
-    except Exception as e:
-        st.error(f"Chyba pri prístupe k hárku členstva: {e}")
-        return None
-
-
-def get_membership_statuses(worksheet):
-    """Načíta z hárku slovník Meno -> Status (Uhradené / Neuhradené)."""
-    try:
-        records = worksheet.get_all_records()
-        if not records:
-            return {}
-        result = {}
-        for row in records:
-            name = row.get('Meno', '').strip()
-            if name:
-                result[name] = row.get('Status', 'Neuhradené').strip() or 'Neuhradené'
-        return result
-    except Exception as e:
-        return {}
-
-
-def update_membership_sheet(worksheet, member_status_list):
-    """
-    Zapíše do hárku zoznam členov so statusmi.
-    member_status_list: zoznam dvojíc (meno, status), status je "Uhradené" alebo "Neuhradené"
-    """
-    try:
-        if not member_status_list:
-            worksheet.clear()
-            worksheet.update('A1:C1', [['Meno', 'Status', 'Poznámka']])
-            worksheet.format('A1:C1', {
-                'textFormat': {'bold': True},
-                'backgroundColor': {'red': 0.9, 'green': 0.9, 'blue': 0.9}
-            })
-            return True
-        rows = [[name, status, ""] for name, status in member_status_list]
-        # Hlavička + dáta
-        worksheet.update('A1:C1', [['Meno', 'Status', 'Poznámka']])
-        worksheet.update(f'A2:C{1 + len(rows)}', rows)
-        worksheet.format('A1:C1', {
-            'textFormat': {'bold': True},
-            'backgroundColor': {'red': 0.9, 'green': 0.9, 'blue': 0.9}
-        })
-        return True
-    except Exception as e:
-        st.error(f"Chyba pri ukladaní: {e}")
-        return False
-
-
-def get_all_attendance_data(client, spreadsheet_id, use_cache=True, cache_ttl=300):
+def get_all_attendance_data(client, spreadsheet_id, use_cache=True, cache_ttl=600):
     """
     Získanie všetkých dát o účasti zo všetkých hárkov.
     
@@ -380,7 +264,7 @@ def get_all_attendance_data(client, spreadsheet_id, use_cache=True, cache_ttl=30
         client: Google Sheets klient
         spreadsheet_id: ID spreadsheetu
         use_cache: Použiť cache (default: True)
-        cache_ttl: Cache TTL v sekundách (default: 300 = 5 minút)
+        cache_ttl: Cache TTL v sekundách (default: 600 = 10 minút)
     
     Returns:
         DataFrame s dátami o dochádzke
@@ -406,16 +290,13 @@ def get_all_attendance_data(client, spreadsheet_id, use_cache=True, cache_ttl=30
         
         for worksheet in worksheets:
             try:
-                # Skúsime načítať dáta z hárku
                 records = worksheet.get_all_records()
                 if records:
                     df = pd.DataFrame(records)
-                    # Pridáme dátum z názvu hárku
                     sheet_name = worksheet.title
                     df['Dátum'] = sheet_name
                     all_data.append(df)
-            except Exception as e:
-                # Preskočíme hárky, ktoré nemajú správny formát
+            except Exception:
                 continue
         
         if all_data:
@@ -441,7 +322,7 @@ def get_all_attendance_data(client, spreadsheet_id, use_cache=True, cache_ttl=30
             **Riešenie:**
             - Počkaj 1-2 minúty a skús znova
             - Použi tlačidlo "💾 Obnoviť cache" len keď je to nevyhnutné
-            - Cache sa automaticky obnoví každých 5 minút
+            - Cache sa automaticky obnoví každých 10 minút
             """)
             
             # Skúsiť vrátiť cache aj keď je starý
@@ -2567,12 +2448,13 @@ def scanner_view(worksheet):
         next_t = get_next_training_time()
         manual_time_index = manual_times_today.index(next_t) if next_t in manual_times_today else 0
         manual_time = st.selectbox("Čas tréningu", options=manual_times_today, index=manual_time_index)
+        manual_note = st.text_input("Poznámka", placeholder="Voliteľná poznámka (zobrazí sa v Google Sheet)...")
         
         submitted = st.form_submit_button("✅ Prihlásiť", type="primary", use_container_width=True)
         
         if submitted:
             if manual_name.strip():
-                result = add_attendance(worksheet, manual_name.strip(), manual_membership, manual_time)
+                result = add_attendance(worksheet, manual_name.strip(), manual_membership, manual_time, note=manual_note)
                 if result is True:
                     st.success(f"✅ {manual_name} bol úspešne prihlásený!")
                     st.balloons()
@@ -2582,102 +2464,6 @@ def scanner_view(worksheet):
                     st.error("❌ Chyba pri prihlasovaní.")
             else:
                 st.warning("⚠️ Prosím, zadaj meno.")
-
-
-def membership_admin_view(client, spreadsheet_id):
-    """
-    Samostatný view: zoznam členov s mesačným členstvom, ktorí v danom mesiaci boli aspoň raz na tréningu.
-    Zoradené podľa abecedy, pri každom prepínateľný status Uhradené / Neuhradené.
-    Dáta sa ukladajú do Google Sheet pre každý mesiac zvlášť (hárok Členstvo_YYYY-MM).
-    Chránené heslom (trénerské).
-    """
-    if not check_trainer_auth():
-        trainer_login()
-        return
-
-    st.title("📋 Mesačné členstvo – admin")
-    st.markdown("Zoznam členov s mesačným členstvom, ktorí v zvolenom mesiaci boli aspoň raz na tréningu. Status uhradenia párujte manuálne.")
-    st.markdown("---")
-
-    col1, col2 = st.columns([3, 1])
-    with col1:
-        if st.button("🔄 Obnoviť", use_container_width=True):
-            st.rerun()
-    with col2:
-        if st.button("🚪 Odhlásiť sa", use_container_width=True):
-            st.session_state.trainer_authenticated = False
-            st.rerun()
-
-    # Načítanie dát pre výber mesiacov a zoznam členov
-    df_all = get_all_attendance_data(client, spreadsheet_id, use_cache=False)
-    if df_all.empty:
-        st.info("Zatiaľ nie sú žiadne dáta o dochádzke.")
-        return
-
-    df_all['Dátum_parsed'] = pd.to_datetime(df_all['Dátum'], errors='coerce', format='%Y-%m-%d')
-    df_all = df_all.dropna(subset=['Dátum_parsed'])
-    df_all['Mesiac_str'] = df_all['Dátum_parsed'].dt.to_period('M').astype(str)
-    available_months = sorted(df_all['Mesiac_str'].unique(), reverse=True)
-
-    if not available_months:
-        st.info("Zatiaľ nie sú žiadne mesiace s dochádzkou.")
-        return
-
-    selected_month = st.selectbox(
-        "Vyber mesiac",
-        options=available_months,
-        index=0,
-        key="membership_admin_month"
-    )
-
-    members = get_monthly_members_with_monthly_membership(client, spreadsheet_id, selected_month)
-    if not members:
-        st.info(f"V mesiaci {selected_month} nebol nikto s mesačným členstvom aspoň raz na tréningu.")
-        return
-
-    membership_sheet = get_or_create_membership_sheet(client, spreadsheet_id, selected_month)
-    if not membership_sheet:
-        return
-
-    existing_statuses = get_membership_statuses(membership_sheet)
-
-    st.markdown(f"### Mesiac **{selected_month}** – {len(members)} členov")
-    st.markdown("---")
-
-    # Session state pre aktuálne statusy (aby sa nez resetovali pri rerun)
-    state_key = f"membership_status_{selected_month}"
-    if state_key not in st.session_state:
-        st.session_state[state_key] = {
-            name: existing_statuses.get(name, "Neuhradené") for name in members
-        }
-
-    # Pri načítaní existujúcich z sheetu môžeme synchronizovať state
-    for name in members:
-        if name in existing_statuses and st.session_state[state_key].get(name) != existing_statuses[name]:
-            st.session_state[state_key][name] = existing_statuses[name]
-
-    member_status_list = []
-    for i, name in enumerate(members):
-        current = st.session_state[state_key].get(name, "Neuhradené")
-        new_status = st.radio(
-            f"**{name}**",
-            options=["Neuhradené", "Uhradené"],
-            index=1 if current == "Uhradené" else 0,
-            key=f"membership_status_{selected_month}_{i}_{name}",
-            horizontal=True
-        )
-        st.session_state[state_key][name] = new_status
-        member_status_list.append((name, new_status))
-
-    st.markdown("---")
-    if st.button("💾 Uložiť zmeny do Google Sheet", type="primary", use_container_width=True):
-        if update_membership_sheet(membership_sheet, member_status_list):
-            st.success("Zmeny boli uložené do hárka Členstvo_" + selected_month + ".")
-            st.rerun()
-        else:
-            st.error("Uloženie zlyhalo.")
-
-    st.caption("Hárok v Google Sheet: **Členstvo_" + selected_month + "** (stĺpce: Meno, Status, Poznámka)")
 
 
 def docs_view():
@@ -3085,10 +2871,6 @@ def main():
             st.query_params["view"] = "docs"
             st.rerun()
         
-        if st.button("📋 Mesačné členstvo", use_container_width=True):
-            st.query_params["view"] = "membership_admin"
-            st.rerun()
-        
         st.markdown("---")
         # Zobrazenie lokálneho dátumu
         today = get_local_time().date()
@@ -3105,8 +2887,6 @@ def main():
         scanner_view(worksheet)
     elif view == "docs":
         docs_view()
-    elif view == "membership_admin":
-        membership_admin_view(client, spreadsheet_id)
     else:
         participant_view(worksheet, query_params)
 
