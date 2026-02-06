@@ -77,6 +77,10 @@ TRAINING_TIMES = [
 TRAINING_TIMES_WEEKDAY = ["7:00", "15:30", "17:00", "18:30"]  # Po–Pia
 TRAINING_TIMES_WEEKEND = ["9:00"]  # So–Ne
 
+# Iba manuálne prihlásenie (Tréner): Ut a Št 17:30 – nie je v QR/participant formulári
+MANUAL_ONLY_TRAINING = "17:30 - ženský tréning s Diankou"
+MANUAL_ONLY_WEEKDAYS = (1, 3)  # Tuesday=1, Thursday=3
+
 
 def get_training_times_for_today():
     """Vráti zoznam časov tréningov dostupných dnes. Cez víkend len 9:00, cez týždeň bez 9:00."""
@@ -85,6 +89,19 @@ def get_training_times_for_today():
     if now.weekday() >= 5:  # Sobota(5) alebo Nedeľa(6)
         return TRAINING_TIMES_WEEKEND
     return TRAINING_TIMES_WEEKDAY
+
+
+def get_training_times_for_manual_form():
+    """
+    Časy tréningov pre manuálny formulár (Tréner).
+    Cez týždeň obsahuje aj „17:30 - ženský tréning s Diankou“ v Ut a Št.
+    Tento tréning nie je dostupný cez QR ani cez formulár účastníka.
+    """
+    times = get_training_times_for_today()
+    now = get_local_time()
+    if now.weekday() in MANUAL_ONLY_WEEKDAYS:  # Ut=1, Št=3
+        return times + [MANUAL_ONLY_TRAINING]
+    return times
 
 
 # Heslo pre trénerskú časť
@@ -1851,8 +1868,8 @@ def trainer_view(worksheet):
         time_column = 'Čas tréningu' if 'Čas tréningu' in df.columns else 'Tréning'
         
         if time_column in df.columns:
-            # Zoskupenie podľa času tréningu
-            for training_time in TRAINING_TIMES:
+            # Zoskupenie podľa času tréningu (vrátane manuálneho „17:30 - ženský tréning s Diankou“ v Ut/Št)
+            for training_time in get_training_times_for_manual_form():
                 time_df = df[df[time_column] == training_time]
                 count = len(time_df)
                 
@@ -2403,7 +2420,7 @@ def scanner_view(worksheet):
     with st.form("manual_attendance_form"):
         manual_name = st.text_input("Meno a priezvisko", placeholder="Zadaj meno člena...")
         manual_membership = st.selectbox("Typ členstva", options=MEMBERSHIP_TYPES, index=1)
-        manual_times_today = get_training_times_for_today()
+        manual_times_today = get_training_times_for_manual_form()
         next_t = get_next_training_time()
         manual_time_index = manual_times_today.index(next_t) if next_t in manual_times_today else 0
         manual_time = st.selectbox("Čas tréningu", options=manual_times_today, index=manual_time_index)
@@ -2485,6 +2502,9 @@ def docs_view():
     
     Cez víkend sa vždy vyberie **9:00** bez ohľadu na hodinu.
     
+    **Špeciálny tréning len v manuálnom prihlásení (Tréner):**  
+    V **Utorok a Štvrtok** je v trénerskom manuálnom formulári (✍️ Manuálne prihlásenie) dostupný ešte tréning **17:30 - ženský tréning s Diankou**. Na tento tréning sa **nedá** prihlásiť cez QR kód ani cez formulár účastníka – iba tréner ho môže zapísať manuálne.
+    
     ---
     
     ### 🚫 Prevencia duplicít
@@ -2524,6 +2544,7 @@ def docs_view():
     Tréner má prístup k:
     
     - **Zoznam prihlásených** - aktuálna dochádzka na dnešný deň
+    - **Manuálne prihlásenie** - prihlásenie člena bez QR (v Ut a Št aj možnosť **17:30 - ženský tréning s Diankou**)
     - **Vymazanie dochádzky** - možnosť odstrániť nesprávne prihlásenia
     - **Štatistiky** - prehľad dochádzky za obdobie
     
