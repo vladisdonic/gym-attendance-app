@@ -20,8 +20,8 @@ export function renderRegister() {
       <input type="email" id="reg-email" name="email" required autocomplete="email" placeholder="vas@email.sk" />
       <label for="reg-password">Heslo (min. 6 znakov)</label>
       <input type="password" id="reg-password" name="password" required minlength="6" autocomplete="new-password" placeholder="••••••••" />
-      <label for="reg-name">Meno (pre zobrazenie na karte)</label>
-      <input type="text" id="reg-name" name="displayName" required placeholder="Ján Novák" />
+      <label for="reg-name">Meno a priezvisko *</label>
+      <input type="text" id="reg-name" name="displayName" required minlength="3" placeholder="Ján Novák" autocomplete="name" />
       <label for="reg-membership">Typ členstva</label>
       <select id="reg-membership" name="membershipType">
         ${MEMBERSHIP_TYPES.map((t, i) => `<option value="${escapeHtml(t)}" ${i === 1 ? 'selected' : ''}>${escapeHtml(t)}</option>`).join('')}
@@ -44,6 +44,14 @@ export function renderRegister() {
     const password = form.password.value;
     const displayName = form.displayName.value.trim();
     const membershipType = form.membershipType?.value || MEMBERSHIP_TYPES[1];
+    if (!displayName || displayName.length < 2) {
+      errorEl.textContent = 'Zadajte meno a priezvisko.';
+      return;
+    }
+    if (!displayName.includes(' ')) {
+      errorEl.textContent = 'Zadajte prosím meno aj priezvisko (oddelené medzerou).';
+      return;
+    }
     const btn = form.querySelector('button[type="submit"]');
     btn.disabled = true;
     btn.textContent = 'Vytváram účet…';

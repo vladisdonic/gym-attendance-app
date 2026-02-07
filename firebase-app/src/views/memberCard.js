@@ -38,7 +38,7 @@ export function renderMemberCard() {
   el.className = 'view view-card view-member-card';
 
   const profile = getUserProfile();
-  const displayName = profile?.displayName || auth.currentUser?.email || 'Člen';
+  const displayName = (profile?.displayName || '').trim() || 'Člen';
   const membershipType = profile?.membershipType || 'Mesačné členstvo';
   const signInUrl = buildStreamlitUrl(displayName, membershipType);
 
