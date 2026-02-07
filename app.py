@@ -13,6 +13,7 @@ import time
 import pandas as pd
 import json
 from urllib.parse import unquote, quote
+import html
 import qrcode
 import zipfile
 import io
@@ -956,15 +957,19 @@ def participant_view(worksheet, query_params=None):
                     st.success("🎉 Úspešne prihlásený/á!")
                     st.balloons()
                     
-                    # Po úspešnom odoslaní presmeruj späť do PWA alebo na čistú participant stránku
+                    # Presmerovanie cez html() – markdown so scriptom v Streamlit často nebeží
                     redirect_target = return_url if return_url else 'https://giantgym.streamlit.app/?view=participant'
-                    st.markdown(f"""
+                    redirect_html = f"""
+                    <p style="margin:1rem 0;">Presmerovávam...</p>
+                    <p style="font-size:0.9em;"><a href="{html.escape(redirect_target)}" id="return-link">Ak sa nič nestane, klikni sem</a></p>
                     <script>
-                    setTimeout(function() {{
-                        window.location.href = {json.dumps(redirect_target)};
-                    }}, 2000);
+                    (function() {{
+                        var url = {json.dumps(redirect_target)};
+                        setTimeout(function() {{ try {{ window.top.location.href = url; }} catch(e) {{ window.location.href = url; }} }}, 1500);
+                    }})();
                     </script>
-                    """, unsafe_allow_html=True)
+                    """
+                    st.components.v1.html(redirect_html, height=80)
                     return
                 elif result == "duplicate":
                     st.warning("⚠️ Už si prihlásený/á na tento tréning. Nemôžeš sa prihlásiť dvakrát.")
@@ -987,16 +992,20 @@ def participant_view(worksheet, query_params=None):
                     st.success("🎉 Úspešne prihlásený/á!")
                     st.balloons()
                     
-                    # Ak bolo odoslanie cez URL parametre, presmeruj (späť do PWA ak je return_url)
+                    # Presmerovanie späť do PWA alebo na participant (cez html() – script v markdown nebeží)
                     if auto_submit or return_url:
                         redirect_target = return_url if return_url else 'https://giantgym.streamlit.app/?view=participant'
-                        st.markdown(f"""
+                        redirect_html = f"""
+                        <p style="margin:1rem 0;">Presmerovávam...</p>
+                        <p style="font-size:0.9em;"><a href="{html.escape(redirect_target)}" id="return-link">Ak sa nič nestane, klikni sem</a></p>
                         <script>
-                        setTimeout(function() {{
-                            window.location.href = {json.dumps(redirect_target)};
-                        }}, 2000);
+                        (function() {{
+                            var url = {json.dumps(redirect_target)};
+                            setTimeout(function() {{ try {{ window.top.location.href = url; }} catch(e) {{ window.location.href = url; }} }}, 1500);
+                        }})();
                         </script>
-                        """, unsafe_allow_html=True)
+                        """
+                        st.components.v1.html(redirect_html, height=80)
                 elif result == "duplicate":
                     st.warning("⚠️ Už si prihlásený/á na tento tréning. Nemôžeš sa prihlásiť dvakrát.")
 
