@@ -1,0 +1,34 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    function isSignedIn() {
+      return request.auth != null;
+    }
+    function isOwner(uid) {
+      return request.auth != null && request.auth.uid == uid;
+    }
+    function getRole() {
+      return get(/databases/$(database)/documents/profiles/$(request.auth.uid)).data.role;
+    }
+    function isTrainer() {
+      return isSignedIn() && getRole() == 'trainer';
+    }
+    function isAdmin() {
+      return isSignedIn() && getRole() == 'admin';
+    }
+
+    match /profiles/{userId} {
+      allow read: if isSignedIn();
+      allow create: if isSignedIn() && isOwner(userId);
+      allow update: if isOwner(userId) || isAdmin();
+      allow delete: if isAdmin();
+    }
+
+    match /attendance/{id} {
+      allow read: if isSignedIn();
+      allow create: if isSignedIn()
+        || (request.auth == null && request.resource.data.userId == null);
+      allow update, delete: if isTrainer() || isAdmin();
+    }
+  }
+}

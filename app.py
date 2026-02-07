@@ -110,6 +110,9 @@ TRAINER_PASSWORD = "supernova"
 # Heslo pre dokumentáciu
 DOCS_PASSWORD = "supernova"
 
+# URL PWA (Firebase Hosting) pre kartu člena
+PWA_BASE_URL = "https://giantgym-app.web.app"
+
 # Časové pásmo pre Slovensko
 TIMEZONE = pytz.timezone('Europe/Bratislava')
 
@@ -867,6 +870,10 @@ def participant_view(worksheet, query_params=None):
                 mime="image/png",
                 use_container_width=True
             )
+            if PWA_BASE_URL and st.session_state.get('personal_qr_url'):
+                pwa_card_url = f"{PWA_BASE_URL.rstrip('/')}/#/card?u={quote(st.session_state['personal_qr_url'])}&name={quote(st.session_state.get('personal_qr_name', ''))}"
+                st.markdown("### 📱 PWA karta (pridať na plochu)")
+                st.markdown(f"Otvoriť ako aplikáciu – zobrazí meno, QR a tlačidlo **Prihlásiť na tréning**. [Otvoriť PWA kartu]({pwa_card_url})")
             
     st.markdown("---")
     
