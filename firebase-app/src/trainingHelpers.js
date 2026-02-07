@@ -3,6 +3,8 @@
  * Časové pásmo: Europe/Bratislava (Slovensko).
  */
 
+export const STREAMLIT_BASE_URL = 'https://giantgym.streamlit.app';
+
 export const MEMBERSHIP_TYPES = [
   'Skúšobný tréning',
   'Mesačné členstvo',

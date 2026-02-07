@@ -2,6 +2,7 @@ import { createUserWithEmailAndPassword } from 'firebase/auth';
 import { doc, setDoc } from 'firebase/firestore';
 import { auth, db } from '../firebase.js';
 import { navigateTo } from '../app.js';
+import { MEMBERSHIP_TYPES } from '../trainingHelpers.js';
 
 const DEFAULT_ROLE = 'user';
 
@@ -11,7 +12,7 @@ export function renderRegister() {
 
   el.innerHTML = `
     <header class="auth-header">
-      <h1>🥊 Gym Evidencia</h1>
+      <h1>🥊 Giant Gym</h1>
       <p>Registrácia</p>
     </header>
     <form class="auth-form" id="register-form">
@@ -19,12 +20,16 @@ export function renderRegister() {
       <input type="email" id="reg-email" name="email" required autocomplete="email" placeholder="vas@email.sk" />
       <label for="reg-password">Heslo (min. 6 znakov)</label>
       <input type="password" id="reg-password" name="password" required minlength="6" autocomplete="new-password" placeholder="••••••••" />
-      <label for="reg-name">Meno (pre zobrazenie)</label>
+      <label for="reg-name">Meno (pre zobrazenie na karte)</label>
       <input type="text" id="reg-name" name="displayName" required placeholder="Ján Novák" />
+      <label for="reg-membership">Typ členstva</label>
+      <select id="reg-membership" name="membershipType">
+        ${MEMBERSHIP_TYPES.map((t, i) => `<option value="${escapeHtml(t)}" ${i === 1 ? 'selected' : ''}>${escapeHtml(t)}</option>`).join('')}
+      </select>
       <button type="submit" class="btn btn-primary">Vytvoriť účet</button>
       <p class="auth-error" id="register-error"></p>
       <p class="auth-link">
-        Už máte účet? <a href="#">Prihlásiť sa</a>
+        Už máte účet? <a href="#/login">Prihlásiť sa</a>
       </p>
     </form>
   `;
@@ -32,17 +37,13 @@ export function renderRegister() {
   const form = el.querySelector('#register-form');
   const errorEl = el.querySelector('#register-error');
 
-  el.querySelector('.auth-link a').addEventListener('click', (e) => {
-    e.preventDefault();
-    navigateTo('/');
-  });
-
   form.addEventListener('submit', async (e) => {
     e.preventDefault();
     errorEl.textContent = '';
     const email = form.email.value.trim();
     const password = form.password.value;
     const displayName = form.displayName.value.trim();
+    const membershipType = form.membershipType?.value || MEMBERSHIP_TYPES[1];
     const btn = form.querySelector('button[type="submit"]');
     btn.disabled = true;
     btn.textContent = 'Vytváram účet…';
@@ -51,6 +52,7 @@ export function renderRegister() {
       await setDoc(doc(db, 'profiles', cred.user.uid), {
         email,
         displayName,
+        membershipType,
         role: DEFAULT_ROLE,
         createdAt: new Date().toISOString()
       });
@@ -70,4 +72,11 @@ export function renderRegister() {
   });
 
   return el;
+}
+
+function escapeHtml(s) {
+  if (s == null) return '';
+  const div = document.createElement('div');
+  div.textContent = s;
+  return div.innerHTML;
 }

@@ -782,6 +782,8 @@ def participant_view(worksheet, query_params=None):
     url_membership = unquote(query_params.get("membership", ""))
     url_time = unquote(query_params.get("time", ""))
     auto_submit = query_params.get("auto", "0") == "1"
+    _return_url_raw = unquote(query_params.get("return_url", "")).strip()
+    return_url = _return_url_raw if (_return_url_raw.startswith("https://") and " " not in _return_url_raw) else ""  # len HTTPS, bez open redirect
     
     # Časy tréningov dostupné dnes (víkend len 9:00, týždeň bez 9:00)
     training_times_today = get_training_times_for_today()
@@ -954,12 +956,13 @@ def participant_view(worksheet, query_params=None):
                     st.success("🎉 Úspešne prihlásený/á!")
                     st.balloons()
                     
-                    # Po úspešnom odoslaní presmeruj na čistú stránku (bez parametrov)
-                    st.markdown("""
+                    # Po úspešnom odoslaní presmeruj späť do PWA alebo na čistú participant stránku
+                    redirect_target = return_url if return_url else 'https://giantgym.streamlit.app/?view=participant'
+                    st.markdown(f"""
                     <script>
-                    setTimeout(function() {
-                        window.location.href = 'https://giantgym.streamlit.app/?view=participant';
-                    }, 2000);
+                    setTimeout(function() {{
+                        window.location.href = {json.dumps(redirect_target)};
+                    }}, 2000);
                     </script>
                     """, unsafe_allow_html=True)
                     return
@@ -984,13 +987,14 @@ def participant_view(worksheet, query_params=None):
                     st.success("🎉 Úspešne prihlásený/á!")
                     st.balloons()
                     
-                    # Ak bolo odoslanie cez URL parametre, presmeruj
-                    if auto_submit:
-                        st.markdown("""
+                    # Ak bolo odoslanie cez URL parametre, presmeruj (späť do PWA ak je return_url)
+                    if auto_submit or return_url:
+                        redirect_target = return_url if return_url else 'https://giantgym.streamlit.app/?view=participant'
+                        st.markdown(f"""
                         <script>
-                        setTimeout(function() {
-                            window.location.href = 'https://giantgym.streamlit.app/?view=participant';
-                        }, 2000);
+                        setTimeout(function() {{
+                            window.location.href = {json.dumps(redirect_target)};
+                        }}, 2000);
                         </script>
                         """, unsafe_allow_html=True)
                 elif result == "duplicate":

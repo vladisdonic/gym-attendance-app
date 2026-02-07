@@ -1,13 +1,9 @@
 import { auth } from './firebase.js';
 import { renderLogin } from './views/login.js';
 import { renderRegister } from './views/register.js';
-import { renderDashboard } from './views/dashboard.js';
-import { renderCheckIn } from './views/checkin.js';
-import { renderTrainer } from './views/trainer.js';
-import { renderAdmin } from './views/admin.js';
-import { renderQr } from './views/qr.js';
 import { renderLanding } from './views/landing.js';
 import { renderCard } from './views/card.js';
+import { renderMemberCard } from './views/memberCard.js';
 
 let currentUserProfile = null;
 
@@ -56,37 +52,8 @@ function renderApp(user) {
     return;
   }
 
-  const { path, params } = getRoute();
-  const role = getRole();
-
   app.innerHTML = '';
-
-  if (path === '/checkin' || params.get('view') === 'participant') {
-    app.appendChild(renderCheckIn());
-    return;
-  }
-  if (path === '/qr') {
-    app.appendChild(renderQr());
-    return;
-  }
-  if (path === '/trainer' || params.get('view') === 'trainer') {
-    if (role !== 'trainer' && role !== 'admin') {
-      app.appendChild(renderDashboard());
-      return;
-    }
-    app.appendChild(renderTrainer());
-    return;
-  }
-  if (path === '/admin') {
-    if (role !== 'admin') {
-      app.appendChild(renderDashboard());
-      return;
-    }
-    app.appendChild(renderAdmin());
-    return;
-  }
-
-  app.appendChild(renderDashboard());
+  app.appendChild(renderMemberCard());
 }
 
 export function navigateTo(path) {

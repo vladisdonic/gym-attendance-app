@@ -8,7 +8,7 @@ export function renderLogin() {
 
   el.innerHTML = `
     <header class="auth-header">
-      <h1>🥊 Gym Evidencia</h1>
+      <h1>🥊 Giant Gym</h1>
       <p>Prihlásenie</p>
     </header>
     <form class="auth-form" id="login-form">

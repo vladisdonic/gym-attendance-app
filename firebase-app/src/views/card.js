@@ -10,10 +10,18 @@ export function renderCard() {
   const hashPart = window.location.hash.slice(1) || '';
   const queryStart = hashPart.indexOf('?');
   const params = new URLSearchParams(queryStart >= 0 ? hashPart.slice(queryStart + 1) : '');
-  const signInUrl = params.get('u') ? decodeURIComponent(params.get('u')) : '';
+  let signInUrl = params.get('u') ? decodeURIComponent(params.get('u')) : '';
   const name = params.get('name') ? decodeURIComponent(params.get('name')) : '';
 
-  if (!signInUrl) {
+  if (signInUrl && window.location.origin) {
+    try {
+      const u = new URL(signInUrl);
+      u.searchParams.set('return_url', window.location.origin);
+      signInUrl = u.toString();
+    } catch (_) {}
+  }
+
+  if (!params.get('u')) {
     el.innerHTML = `
       <main class="card-main card-error">
         <h1>🥊 Giant Gym</h1>

@@ -628,3 +628,41 @@ body {
   color: var(--error);
   font-size: 0.9rem;
 }
+
+.view-card .card-membership {
+  font-size: 0.95rem;
+  color: var(--text-muted);
+  margin: -0.5rem 0 1rem;
+}
+
+.view-member-card .member-card-logout {
+  margin-top: 1rem;
+  color: var(--text-muted);
+}
+
+.view-member-card .member-card-pwa {
+  margin-top: 1rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.view-member-card .member-card-install {
+  font-size: 0.95rem;
+}
+
+.view-member-card .member-card-ios-install {
+  text-align: left;
+  font-size: 0.9rem;
+  color: var(--text-muted);
+}
+
+.view-member-card .member-card-ios-install summary {
+  cursor: pointer;
+  color: var(--text);
+}
+
+.view-member-card .member-card-ios-steps {
+  margin: 0.5rem 0 0 1rem;
+  padding-left: 0.5rem;
+}
